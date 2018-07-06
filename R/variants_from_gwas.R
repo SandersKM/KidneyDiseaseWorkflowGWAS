@@ -27,10 +27,11 @@ gene.of.interest.end.GRCh38 <- getBM("end_position", filters="hgnc_symbol",
 gwas.api.url <- paste("https://www.ebi.ac.uk/gwas/labs/rest/api/singleNucleotidePolymorphisms/search/findByGene?geneName=",
                       gene.of.interest, sep = "")
 gwas.api.content <- fromJSON(toJSON(content(GET(gwas.api.url))))
-gwas_variants <- data.frame(rsID = unlist(gwas.api.content$`_embedded`$singleNucleotidePolymorphisms$rsId))
-gwas_variants$functionalClass <- unlist(gwas.api.content$`_embedded`$singleNucleotidePolymorphisms$functionalClass)
-gwas_variants$genomicContexts <- sapply(1:dim(gwas_variants)[1], function(n){
-  gwas.api.content$`_embedded`$singleNucleotidePolymorphisms$genomicContexts[n]})
+gwas_variants <- data.frame(rsID = unlist(unique(gwas.api.content$`_embedded`$singleNucleotidePolymorphisms$rsId)))
+#gwas_variants$functionalClass <- unlist(gwas.api.content$`_embedded`$singleNucleotidePolymorphisms$functionalClass)
+gwas_variants$genomicContexts <- sapply(gwas_variants$rsID, function(x){
+  gwas.api.content$`_embedded`$singleNucleotidePolymorphisms$genomicContexts[
+    which(gwas.api.content$`_embedded`$singleNucleotidePolymorphisms$rsId == x)][1]})
 gwas_variants$chromosome <- sapply(1:dim(gwas_variants)[1], function(n){
   gwas_variants$genomicContexts[n][[1]]$location$chromosomeName[[1]]})
 gwas_variants$position.GRCh38 <- sapply(1:dim(gwas_variants)[1], function(n){
@@ -83,3 +84,12 @@ get_distance_from_gene <- function(n){
   }
 }
 sapply(1:dim(gwas_variants)[1], get_distance_from_gene)
+gwas_variants$Closest <- sapply(1:dim(gwas_variants)[1], function(n){
+  return(gwas_variants$genomicContexts[[n]]$isClosestGene[which(gwas_variants$genomicContexts[[n]]
+                                                               $gene$geneName == gene.of.interest)[1]][[1]])})
+gwas_variants$closest.genes <- sapply(1:dim(gwas_variants)[1], function(n){
+  return(gsub(",",";", toString(unique(gwas_variants$genomicContexts[[n]]$gene
+                                       $geneName[which(gwas_variants$genomicContexts[[n]]
+                                                       $isClosestGene == TRUE)]))))
+})
+
