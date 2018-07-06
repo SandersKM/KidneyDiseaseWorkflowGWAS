@@ -48,7 +48,7 @@ variant_from_ensembl <- function(n){
   cont<- fromJSON(toJSON(content(GET(paste("http://grch37.rest.ensembl.org/variation/human/",
                                            gwas_variants$rsID[n],"?content-type=application/json",
                                            sep = "")))))
-  gwas_variants$position.GRCh37[n] <<- cont$mappings$start
+  gwas_variants$position.GRCh37[n] <<- cont$mappings$start[[1]]
   gwas_variants$ancestral.allele[n] <<- cont$ancestral_allele
   gwas_variants$minor.allele[n] <<- cont$minor_allele
   gwas_variants$MAF[n] <<- cont$MAF
@@ -56,8 +56,30 @@ variant_from_ensembl <- function(n){
   }
 sapply(1:dim(gwas_variants)[1],variant_from_ensembl)
 gwas_variants$Intergenic <- sapply(1:dim(gwas_variants)[1], function(n){
-  gwas_variants$genomicContexts[[n]]$isIntergenic[which(i$gene$geneName == "MUC1")[1]][[1]]})
+  gwas_variants$genomicContexts[[n]]$isIntergenic[which(gwas_variants$genomicContexts[[n]]
+                                                        $gene$geneName == gene.of.interest)[1]][[1]]})
+# I feel like the upstream and downstream values are flipped. Check this with Qingbo
 gwas_variants$Upstream <- sapply(1:dim(gwas_variants)[1], function(n){
-  gwas_variants$genomicContexts[[n]]$isUpstream[which(i$gene$geneName == "MUC1")[1]][[1]]})
+  gwas_variants$genomicContexts[[n]]$isUpstream[which(gwas_variants$genomicContexts[[n]]
+                                                      $gene$geneName == gene.of.interest)[1]][[1]]})
 gwas_variants$Downstream <- sapply(1:dim(gwas_variants)[1], function(n){
-  gwas_variants$genomicContexts[[n]]$isDownstream[which(i$gene$geneName == "MUC1")[1]][[1]]})
+  gwas_variants$genomicContexts[[n]]$isDownstream[which(gwas_variants$genomicContexts[[n]]
+                                                        $gene$geneName == gene.of.interest)[1]][[1]]})
+gwas_variants$distance.GRCh37 <- numeric(dim(gwas_variants)[1])
+gwas_variants$distance.GRCh38 <- numeric(dim(gwas_variants)[1])
+get_distance_from_gene <- function(n){
+  if(gwas_variants$Upstream[n]){
+    gwas_variants$distance.GRCh37[n] <<- gwas_variants$position.GRCh37[n] -
+      gene.of.interest.end.GRCh37
+    gwas_variants$distance.GRCh38[n] <<- gwas_variants$position.GRCh38[n] -
+      gene.of.interest.end.GRCh38
+  }
+  else if(gwas_variants$Downstream[n]){
+    gwas_variants$distance.GRCh37[n] <<- gene.of.interest.start.GRCh37 - gwas_variants$position.GRCh37[n]
+    gwas_variants$distance.GRCh38[n] <<- gene.of.interest.start.GRCh38 - gwas_variants$position.GRCh38[n]
+  }
+  else{
+    return(NULL)
+  }
+}
+sapply(1:dim(gwas_variants)[1], get_distance_from_gene)
