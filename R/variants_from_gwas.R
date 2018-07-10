@@ -6,7 +6,7 @@
 library(httr)
 library(xml2)
 library(jsonlite)
-library(biomaRt)
+library(rentrez)
 library(gwascat)
 library(magrittr)
 
@@ -15,6 +15,9 @@ current_gwascat <- makeCurrentGwascat(genome = "GRCh37")
 
 # Enter the HGNC symbol of the gene of interest below
 gene.of.interest <- "MUC1"
+
+# Enter the filepath you would like all documents produced to go to
+gwas.filepath <- "/Users/ksanders/Documents/"
 
 # This will bring you to the nephvs eQTL webpage
 browseURL(paste("http://eqtl.nephvs.org/searchResult/", gene.of.interest, sep = ""))
@@ -39,14 +42,47 @@ get_reported_gene_of_interest <- function(numreported){
   return(strsplit(rows, split = ","))
 }
 
-reported_gene_rows <- as.integer(get_reported_gene_of_interest(length(current_gwascat$`REPORTED GENE(S)`))[[1]])
+reported_gene_rows <- as.integer(get_reported_gene_of_interest(length(
+  current_gwascat$`REPORTED GENE(S)`))[[1]])
 mapped_gene_rows <- which(current_gwascat$MAPPED_GENE == "MUC1")
 combined_gene_rows <- unique(append(mapped_gene_rows, reported_gene_rows))
 # Data frame with combined gene rows with gwas hits
 gwas.specific <- as.data.frame(current_gwascat[combined_gene_rows])
 
-
-
+unique.strongest.risk.allele <- unique(gwas.specific$STRONGEST.SNP.RISK.ALLELE)
+gwas.txt.file <- gene.of.interest
+for(i in unique.strongest.risk.allele){
+  allele.rows <- which(gwas.specific$STRONGEST.SNP.RISK.ALLELE == i)
+  gwas.txt.file <- paste(gwas.txt.file, paste(
+    "RSid: ", i, "; Position (hg19): ",gwas.specific$seqname[allele.rows[1]], ":",
+    gwas.specific$start[allele.rows[1]], sep = ""), sep = "\n")
+  n <- 1
+  for(j in allele.rows){
+    row <- gwas.specific[j,]
+    entrez.var <- entrez_summary(db="pubmed", id=row$PUBMEDID)
+    gwas.txt.file <- paste(gwas.txt.file, "\n",
+      paste("\t", n, ") Study: ", entrez.var$title, sep = ""),
+      paste("First Author: ", entrez.var$firstauthor, ";   Last Author: ", entrez.var$lastauthor, sep = ""),
+      paste("Journal: ", entrez.var$fulljournalname,";    Date Published: ", entrez.var$pubdate, sep=""),
+      paste(entrez.var$articleids$idtype, ":", entrez.var$articleids$value,collapse = " ; "),
+      paste("Disease Trait: ", row$DISEASE.TRAIT, ";    Mapped Trait: ", row$MAPPED.TRAIT),
+      paste("Reported / Mapped Genes: ", gsub(",","; ",paste(unique(c(
+        row$REPORTED.GENE.S., row$MAPPED_GENE)), collapse = "; " )), sep = ""),
+      paste("Initial Sample Size: ", row$INITIAL.SAMPLE.SIZE,
+            ";     Replication Sample Size: ", row$REPLICATION.SAMPLE.SIZE, sep = ""),
+      paste("Risk Allele Frequency: ", row$RISK.ALLELE.FREQUENCY, sep = ""),
+      paste("Platform: ", strsplit(row$PLATFORM..SNPS.PASSING.QC., split = " ")[[1]][1],
+           ";    SNPs Passing WC: ", paste(strsplit(row$PLATFORM..SNPS.PASSING.QC., split = " ")[[1]][-1],
+                                           collapse = ""), sep= ""),
+      paste("P-Value: ", row$P.VALUE, ";    -log_10(P-Value): ", row$PVALUE_MLOG, ";   Odds Ratio / BETA: ",
+            row$OR.or.BETA, sep=""),
+      sep = "\n\t")
+    n <- n+1
+  }
+}
+gwas.txt.file.write <- file(paste(gwas.filepath, "gwas_", gene.of.interest, ".txt",sep = ""))
+writeLines(gwas.txt.file, gwas.txt.file.write)
+close(gwas.txt.file.write)
 
 # Getting Start and End information for gene of interest
 # ensembl.GRCh37 = useEnsembl(biomart="ensembl", dataset="hsapiens_gene_ensembl", GRCh=37)
