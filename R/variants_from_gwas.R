@@ -28,6 +28,56 @@ nephQTL.glom <- read.csv(paste(filepath, "glom_MatrixEQTL_", gene.of.interest,".
 nephQTL.tub <- read.csv(paste(filepath, "tub_MatrixEQTL_", gene.of.interest,".csv", sep = ""),
                         header = TRUE, sep = ",")
 
+# Copy and paste the tubule eQTL for gene of interest from http://18.217.22.69/eqtl
+Susztak.tub <- read.csv(paste(filepath,"Susztak.eQTL.Tubule.MUC1",".csv", sep = ""),
+                        header = TRUE, sep = ",")
+
+# Make general table of eQTL positions/values
+total.rows <- dim(nephQTL.glom)[1] + dim(nephQTL.tub)[1] + dim(Susztak.tub)[1]
+eQTL.combined <- data.frame(SNPid = character(total.rows), chrom = character(total.rows),
+                            position = character(total.rows), ref = character(total.rows),
+                            alt = character(total.rows), pvalue = character(total.rows),
+                            beta = character(total.rows), compartment = character(total.rows),
+                            source = character(total.rows), stringsAsFactors = FALSE)
+
+sapply(1:dim(nephQTL.glom)[1], function(n){
+  eQTL.combined$SNPid[n] <<- toString(nephQTL.glom$dbSNPId[n])
+  chr_pos <- strsplit(toString(nephQTL.glom$Chr.pos[n]), split = ":")
+  eQTL.combined$chrom[n]<<-chr_pos[[1]][1]
+  eQTL.combined$position[n]<<-chr_pos[[1]][2]
+  eQTL.combined$ref[n]<<- toString(nephQTL.glom$Ref.[n])
+  eQTL.combined$alt[n]<<-toString(nephQTL.glom$Alt.[n])
+  eQTL.combined$pvalue[n]<<-toString(nephQTL.glom$P.value[n])
+  eQTL.combined$beta[n]<<-toString(nephQTL.glom$Beta[n])
+  eQTL.combined$compartment[n]<<-"Glom"
+  eQTL.combined$source[n] <<-"NephQTL"
+})
+sapply(1:dim(nephQTL.tub)[1], rowstart = dim(nephQTL.glom)[1], function(n, rowstart){
+  i <- rowstart + n
+  eQTL.combined$SNPid[i] <<- toString(nephQTL.tub$dbSNPId[n])
+  chr_pos <- strsplit(toString(nephQTL.tub$Chr.pos[n]), split = ":")
+  eQTL.combined$chrom[i]<<-chr_pos[[1]][1]
+  eQTL.combined$position[i]<<-chr_pos[[1]][2]
+  eQTL.combined$ref[i]<<- toString(nephQTL.tub$Ref.[n])
+  eQTL.combined$alt[i]<<-toString(nephQTL.tub$Alt.[n])
+  eQTL.combined$pvalue[i]<<-toString(nephQTL.tub$P.value[n])
+  eQTL.combined$beta[i]<<-toString(nephQTL.tub$Beta[n])
+  eQTL.combined$compartment[i]<<-"Tub"
+  eQTL.combined$source[i] <<-"NephQTL"
+})
+sapply(1:dim(Susztak.tub)[1], rowstart = dim(nephQTL.glom)[1] + dim(nephQTL.tub)[1], function(n, rowstart){
+  i <- rowstart + n
+  eQTL.combined$SNPid[i] <<- toString(Susztak.tub$SNP[n])
+  eQTL.combined$chrom[i]<<-toString(Susztak.tub$Chr[n])
+  eQTL.combined$position[i]<<-toString(Susztak.tub$Loc[n])
+  eQTL.combined$ref[i]<<-toString(Susztak.tub$Ref.Allele[n])
+  eQTL.combined$alt[i]<<-toString(Susztak.tub$Alt.Allele[n])
+  eQTL.combined$pvalue[i]<<-toString(Susztak.tub$Pval[n])
+  eQTL.combined$beta[i]<<-toString(Susztak.tub$Beta[n])
+  eQTL.combined$compartment[i]<<- "Tub"
+  eQTL.combined$source[i]<<- "Susztak"
+})
+
 
 # Get GWAS results for variants reported or mapped to Gene of Interest
 get_reported_gene_of_interest <- function(numreported){
