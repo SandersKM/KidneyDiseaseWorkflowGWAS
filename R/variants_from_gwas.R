@@ -84,6 +84,40 @@ gwas.txt.file.write <- file(paste(gwas.filepath, "gwas_", gene.of.interest, ".tx
 writeLines(gwas.txt.file, gwas.txt.file.write)
 close(gwas.txt.file.write)
 
+gwas.variants <- data.frame(RSID = unique(gwas.specific$SNPS))
+
+gwas.variants$chrom <- character(dim(gwas.variants)[1])
+gwas.variants$position <- character(dim(gwas.variants)[1])
+gwas.variants$all.studies  <- character(dim(gwas.variants)[1])
+gwas.variants$risk.allele.A <- character(dim(gwas.variants)[1])
+gwas.variants$risk.allele.C  <- character(dim(gwas.variants)[1])
+gwas.variants$risk.allele.G  <- character(dim(gwas.variants)[1])
+gwas.variants$risk.allele.T <- character(dim(gwas.variants)[1])
+gwas.variants$risk.allele.NA  <- character(dim(gwas.variants)[1])
+gwas.variants$pubmed.links  <- character(dim(gwas.variants)[1])
+get_risk_allele_string <- function(r, a){
+  allele.rows <- gwas.specific.rows[which(substring(
+    r$STRONGEST.SNP.RISK.ALLELE, first = str_length(r$STRONGEST.SNP.RISK.ALLELE[1])) == a),]
+  return(paste("Disease Trait: ", allele.rows$DISEASE.TRAIT,"; P-Value: ", allele.rows$P.VALUE,
+               "; -log_10(P-Value): ", allele.rows$PVALUE_MLOG, "; Odds Ratio / BETA: ", allele.rows$OR.or.BETA,
+               "; 95% CI: ", allele.rows$X95..CI..TEXT., collapse = " | "))
+}
+for(i in 1:dim(gwas.variants)[1]){
+  gwas.specific.rows <- gwas.specific[which(gwas.specific$SNPS == gwas.variants$RSID[i]),]
+  gwas.variants$chrom[i] <- gwas.specific.rows$CHR_ID[1]
+  gwas.variants$position[i] <- gwas.specific.rows$start[1]
+  gwas.variants$all.studies[i]  <- paste(unique(gwas.specific.rows$STUDY), collapse = ";    ")
+  gwas.variants$risk.allele.A[i]  <- get_risk_allele_string(gwas.specific.rows, "A")
+  gwas.variants$risk.allele.C[i]  <- get_risk_allele_string(gwas.specific.rows, "C")
+  gwas.variants$risk.allele.G[i]  <- get_risk_allele_string(gwas.specific.rows, "G")
+  gwas.variants$risk.allele.T[i]  <- get_risk_allele_string(gwas.specific.rows, "T")
+  gwas.variants$risk.allele.NA[i]  <- get_risk_allele_string(gwas.specific.rows, "?")
+  gwas.variants$pubmed.links[i]  <- paste(gwas.specific.rows$LINK, collapse = " ; ")
+}
+
+
+
+
 # Getting Start and End information for gene of interest
 # ensembl.GRCh37 = useEnsembl(biomart="ensembl", dataset="hsapiens_gene_ensembl", GRCh=37)
 # ensembl.GRCh38 = useEnsembl(biomart="ensembl", dataset="hsapiens_gene_ensembl")
