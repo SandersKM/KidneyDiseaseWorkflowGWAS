@@ -3,12 +3,16 @@
 # BSRP 2018
 ###################
 
+# source("http://bioconductor.org/biocLite.R")
+# biocLite("GenomeGraphs")
 library(httr)
 library(xml2)
 library(jsonlite)
 library(rentrez)
 library(gwascat)
 library(magrittr)
+library(GenomeGraphs)
+library(ensembldb)
 
 # Run this only if this value doesn't already exist. It takes a while.
 current_gwascat <- makeCurrentGwascat(genome = "GRCh37")
@@ -78,6 +82,26 @@ sapply(1:dim(Susztak.tub)[1], rowstart = dim(nephQTL.glom)[1] + dim(nephQTL.tub)
   eQTL.combined$source[i]<<- "Susztak"
 })
 
+# Get combined sheet with GWAS and eQTL
+
+
+# Gene Plot
+mart <- useMart("ensembl", dataset = "hsapiens_gene_ensembl")
+# plusStrand <- makeGeneRegion(chromosome = as.numeric(eQTL.combined$chrom[1]),
+#                              start =min( as.numeric(eQTL.combined$position)),
+#                              end = max( as.numeric(eQTL.combined$position)), strand = "+", biomart = mart)
+minStrand <- makeGeneRegion(chromosome = as.numeric(eQTL.combined$chrom[1]),
+                            start =min( as.numeric(eQTL.combined$position)),
+                            end = max( as.numeric(eQTL.combined$position)),
+                            strand = "-", biomart = mart)
+ideogram <- makeIdeogram(as.numeric(eQTL.combined$chrom[1]))
+genomeAxis <- makeGenomeAxis(add53 = TRUE, add35 = TRUE)
+gdPlot(list(ideogram,genomeAxis, minStrand, gene.image),
+       minBase = min( as.numeric(eQTL.combined$position)),
+       maxBase = max( as.numeric(eQTL.combined$position)))
+
+
+gene.image <- makeGene(id = gene.of.interest, type = "hgnc_symbol", biomart = mart)
 
 # Get GWAS results for variants reported or mapped to Gene of Interest
 get_reported_gene_of_interest <- function(numreported){
