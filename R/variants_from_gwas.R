@@ -3,6 +3,7 @@
 # BSRP 2018
 ###################
 
+# library("car")
 # source("http://bioconductor.org/biocLite.R")
 # biocLite("GenomeGraphs")
 library(httr)
@@ -13,6 +14,7 @@ library(gwascat)
 library(magrittr)
 library(GenomeGraphs)
 library(ensembldb)
+library(eqtl)
 
 # Run this only if this value doesn't already exist. It takes a while.
 current_gwascat <- makeCurrentGwascat(genome = "GRCh37")
@@ -37,7 +39,7 @@ Susztak.tub <- read.csv(paste(filepath,"Susztak.eQTL.Tubule.MUC1",".csv", sep = 
                         header = TRUE, sep = ",")
 
 # Make general table of eQTL positions/values
-total.rows <- dim(nephQTL.glom)[1] + dim(nephQTL.tub)[1] + dim(Susztak.tub)[1]
+total.rows <- dim(nephQTL.glom)[1] + dim(nephQTL.tub)[1]
 eQTL.combined <- data.frame(SNPid = character(total.rows), chrom = character(total.rows),
                             position = character(total.rows), ref = character(total.rows),
                             alt = character(total.rows), pvalue = character(total.rows),
@@ -69,39 +71,22 @@ sapply(1:dim(nephQTL.tub)[1], rowstart = dim(nephQTL.glom)[1], function(n, rowst
   eQTL.combined$compartment[i]<<-"Tub"
   eQTL.combined$source[i] <<-"NephQTL"
 })
-sapply(1:dim(Susztak.tub)[1], rowstart = dim(nephQTL.glom)[1] + dim(nephQTL.tub)[1], function(n, rowstart){
-  i <- rowstart + n
-  eQTL.combined$SNPid[i] <<- toString(Susztak.tub$SNP[n])
-  eQTL.combined$chrom[i]<<-toString(Susztak.tub$Chr[n])
-  eQTL.combined$position[i]<<-toString(Susztak.tub$Loc[n])
-  eQTL.combined$ref[i]<<-toString(Susztak.tub$Ref.Allele[n])
-  eQTL.combined$alt[i]<<-toString(Susztak.tub$Alt.Allele[n])
-  eQTL.combined$pvalue[i]<<-toString(Susztak.tub$Pval[n])
-  eQTL.combined$beta[i]<<-toString(Susztak.tub$Beta[n])
-  eQTL.combined$compartment[i]<<- "Tub"
-  eQTL.combined$source[i]<<- "Susztak"
-})
+# sapply(1:dim(Susztak.tub)[1], rowstart = dim(nephQTL.glom)[1] + dim(nephQTL.tub)[1], function(n, rowstart){
+#   i <- rowstart + n
+#   eQTL.combined$SNPid[i] <<- toString(Susztak.tub$SNP[n])
+#   eQTL.combined$chrom[i]<<-toString(Susztak.tub$Chr[n])
+#   eQTL.combined$position[i]<<-toString(Susztak.tub$Loc[n])
+#   eQTL.combined$ref[i]<<-toString(Susztak.tub$Ref.Allele[n])
+#   eQTL.combined$alt[i]<<-toString(Susztak.tub$Alt.Allele[n])
+#   eQTL.combined$pvalue[i]<<-toString(Susztak.tub$Pval[n])
+#   eQTL.combined$beta[i]<<-toString(Susztak.tub$Beta[n])
+#   eQTL.combined$compartment[i]<<- "Tub"
+#   eQTL.combined$source[i]<<- "Susztak"
+# })
 
 # Get combined sheet with GWAS and eQTL
 
 
-# Gene Plot
-mart <- useMart("ensembl", dataset = "hsapiens_gene_ensembl")
-# plusStrand <- makeGeneRegion(chromosome = as.numeric(eQTL.combined$chrom[1]),
-#                              start =min( as.numeric(eQTL.combined$position)),
-#                              end = max( as.numeric(eQTL.combined$position)), strand = "+", biomart = mart)
-minStrand <- makeGeneRegion(chromosome = as.numeric(eQTL.combined$chrom[1]),
-                            start =min( as.numeric(eQTL.combined$position)),
-                            end = max( as.numeric(eQTL.combined$position)),
-                            strand = "-", biomart = mart)
-ideogram <- makeIdeogram(as.numeric(eQTL.combined$chrom[1]))
-genomeAxis <- makeGenomeAxis(add53 = TRUE, add35 = TRUE)
-gdPlot(list(ideogram,genomeAxis, minStrand, gene.image),
-       minBase = min( as.numeric(eQTL.combined$position)),
-       maxBase = max( as.numeric(eQTL.combined$position)))
-
-
-gene.image <- makeGene(id = gene.of.interest, type = "hgnc_symbol", biomart = mart)
 
 # Get GWAS results for variants reported or mapped to Gene of Interest
 get_reported_gene_of_interest <- function(numreported){
@@ -190,7 +175,62 @@ for(i in 1:dim(gwas.variants)[1]){
 }
 
 
+# Gene Plot
+mart <- useMart("ensembl", dataset = "hsapiens_gene_ensembl")
+# plusStrand <- makeGeneRegion(chromosome = as.numeric(eQTL.combined$chrom[1]),
+#                              start =min( as.numeric(eQTL.combined$position)),
+#                              end = max( as.numeric(eQTL.combined$position)), strand = "+", biomart = mart)
+minStrand <- makeGeneRegion(chromosome = as.numeric(eQTL.combined$chrom[1]),
+                            start =min( as.numeric(eQTL.combined$position)),
+                            end = max( as.numeric(eQTL.combined$position)),
+                            strand = "-", biomart = mart)
+ideogram <- makeIdeogram(as.numeric(eQTL.combined$chrom[1]))
+genomeAxis <- makeGenomeAxis(add53 = TRUE, add35 = TRUE)
+gdPlot(list(ideogram,genomeAxis, minStrand, gene.image),
+       minBase = min( as.numeric(eQTL.combined$position)),
+       maxBase = max( as.numeric(eQTL.combined$position)))
 
+
+gene.image <- makeGene(id = gene.of.interest, type = "hgnc_symbol", biomart = mart)
+gdPlot(gene.image)
+
+data("exampleData", package="GenomeGraphs")
+
+gene.of.interest.chrom <- eQTL.combined$chrom[1]
+
+genesplus <- makeGeneRegion(start = minbase, end = maxbase,
+                            strand = "+", chromosome = gene.of.interest.chrom, biomart=mart)
+genesmin <- makeGeneRegion(start = minbase, end = maxbase,
+                           strand = "-", chromosome = gene.of.interest.chrom, biomart=mart)
+
+ideog <- makeIdeogram(chromosome = as.numeric(gene.of.interest.chrom))
+expres <- makeGenericArray(intensity = as.matrix(eQTL.combined$pvalue), probeStart = as.numeric(
+  eQTL.combined$position),dp = DisplayPars(color="darkred", type="point"))
+genomeAxis <- makeGenomeAxis(add53 = TRUE, add35=TRUE)
+
+gdPlot(list(a=ideog,b = expres,d=genesplus,e=genomeAxis,f=genesmin),
+       minBase = minbase, maxBase =maxbase, labelCex = 2)
+
+
+# Creates
+minbase <- min( as.numeric(eQTL.combined$position))
+maxbase <- max( as.numeric(eQTL.combined$position))
+scatter.eQTL <- ggplot2::ggplot(eQTL.combined, ggplot2::aes(x = as.integer(position), y = -log10(as.numeric(eQTL.combined$pvalue)),
+                                            colour = compartment)) +
+  ggplot2::geom_point() +
+  ggplot2:::scale_x_continuous(paste('Position on Chromosome ',gene.of.interest.chrom," (hg19)",sep=""),
+                               breaks=get_breaks(minbase, maxbase)) +
+  ggplot2::ylab("-log 10( P value)") +
+  ggplot2::ggtitle(paste("eQTL Distribution for ", gene.of.interest, sep = ""))+
+  ggplot2::theme(plot.title = ggplot2::element_text(family = "Trebuchet MS", color="#666666", face="bold", size=18, hjust=0)) +
+  ggplot2::theme(axis.title = ggplot2::element_text(family = "Trebuchet MS", color="#666666", face="bold", size=14))
+
+get_breaks<-function(minbase, maxbase){
+  lower <- floor(minbase/1000)*1000
+  upper <- ceiling(maxbase/1000)*1000
+  seglen <- (upper - lower) / 5
+  return(seq(from = lower, to = upper, by= seglen))
+}
 
 # Getting Start and End information for gene of interest
 # ensembl.GRCh37 = useEnsembl(biomart="ensembl", dataset="hsapiens_gene_ensembl", GRCh=37)
