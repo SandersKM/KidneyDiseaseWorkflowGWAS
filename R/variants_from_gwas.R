@@ -16,7 +16,7 @@ library(GenomeGraphs)
 library(ensembldb)
 
 # Run this only if this value doesn't already exist. It takes a while.
-current_gwascat <- makeCurrentGwascat(genome = "GRCh37")
+# current_gwascat <- makeCurrentGwascat(genome = "GRCh37")
 
 # Enter the HGNC symbol of the gene of interest below
 gene.of.interest <- "MUC1"
@@ -28,13 +28,11 @@ gwas.filepath <- "/Users/ksanders/Documents/"
 browseURL(paste("http://eqtl.nephvs.org/searchResult/", gene.of.interest, sep = ""))
 # Enter the path to the location of these downloaded files
 filepath <- "/Users/ksanders/Desktop/"
+
+# Read in the NephQTL data
 nephQTL.glom <- read.csv(paste(filepath, "glom_MatrixEQTL_", gene.of.interest,".csv", sep = ""),
                          header = TRUE, sep = ",")
 nephQTL.tub <- read.csv(paste(filepath, "tub_MatrixEQTL_", gene.of.interest,".csv", sep = ""),
-                        header = TRUE, sep = ",")
-
-# Copy and paste the tubule eQTL for gene of interest from http://18.217.22.69/eqtl
-Susztak.tub <- read.csv(paste(filepath,"Susztak.eQTL.Tubule.MUC1",".csv", sep = ""),
                         header = TRUE, sep = ",")
 
 # Make general table of eQTL positions/values
@@ -70,21 +68,6 @@ sapply(1:dim(nephQTL.tub)[1], rowstart = dim(nephQTL.glom)[1], function(n, rowst
   eQTL.combined$compartment[i]<<-"Tub"
   eQTL.combined$source[i] <<-"NephQTL"
 })
-# sapply(1:dim(Susztak.tub)[1], rowstart = dim(nephQTL.glom)[1] + dim(nephQTL.tub)[1], function(n, rowstart){
-#   i <- rowstart + n
-#   eQTL.combined$SNPid[i] <<- toString(Susztak.tub$SNP[n])
-#   eQTL.combined$chrom[i]<<-toString(Susztak.tub$Chr[n])
-#   eQTL.combined$position[i]<<-toString(Susztak.tub$Loc[n])
-#   eQTL.combined$ref[i]<<-toString(Susztak.tub$Ref.Allele[n])
-#   eQTL.combined$alt[i]<<-toString(Susztak.tub$Alt.Allele[n])
-#   eQTL.combined$pvalue[i]<<-toString(Susztak.tub$Pval[n])
-#   eQTL.combined$beta[i]<<-toString(Susztak.tub$Beta[n])
-#   eQTL.combined$compartment[i]<<- "Tub"
-#   eQTL.combined$source[i]<<- "Susztak"
-# })
-
-# Get combined sheet with GWAS and eQTL
-
 
 
 # Get GWAS results for variants reported or mapped to Gene of Interest
