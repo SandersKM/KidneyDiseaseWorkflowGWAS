@@ -170,6 +170,7 @@ genesplus <- makeGeneRegion(start = minbase, end = maxbase,
                             strand = "+", chromosome = gene.of.interest.chrom, biomart=mart)
 genesmin <- makeGeneRegion(start = minbase, end = maxbase,
                            strand = "-", chromosome = gene.of.interest.chrom, biomart=mart)
+
 expres.glom <- makeSegmentation(value = as.numeric(-log10(as.numeric(eQTL.combined$pvalue[
   which(eQTL.combined$compartment == "Glom")]))), start = as.numeric(
     eQTL.combined$position[which(eQTL.combined$compartment == "Glom")]),end = as.numeric(
@@ -181,8 +182,9 @@ expres.tub <- makeGenericArray(intensity = as.matrix(-log10(as.numeric(eQTL.comb
 genomeAxis <- makeGenomeAxis(add53 = TRUE, add35=TRUE)
 gene.region.overlay <- makeRectangleOverlay(start = 155158300, end = 155162706,
                                             dp = DisplayPars(fill = "yellow", alpha = 0.2, lty = "dashed"))
-
-gdPlot(list(b=genesplus,c=genomeAxis,d=genesmin, e = expres.tub), overlays = gene.region.overlay,
+legend = makeLegend(text = c('Tub','Glom', gene.of.interest),
+                    fill = c('darkred','darkblue', "lightyellow"), cex = 1)
+gdPlot(list(genesplus,genomeAxis,genesmin, "-log(P value)" = expres.tub, legend), overlays = gene.region.overlay,
        minBase = minbase, maxBase =maxbase, labelCex = 2)
 
 
