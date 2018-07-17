@@ -42,7 +42,7 @@ eQTL.combined <- data.frame(SNPid = character(total.rows), chrom = character(tot
                             alt = character(total.rows), pvalue = character(total.rows),
                             beta = character(total.rows), compartment = character(total.rows),
                             source = character(total.rows), stringsAsFactors = FALSE)
-
+# filling with nephQTL glom and tub tables
 sapply(1:dim(nephQTL.glom)[1], function(n){
   eQTL.combined$SNPid[n] <<- toString(nephQTL.glom$dbSNPId[n])
   chr_pos <- strsplit(toString(nephQTL.glom$Chr.pos[n]), split = ":")
@@ -69,7 +69,6 @@ sapply(1:dim(nephQTL.tub)[1], rowstart = dim(nephQTL.glom)[1], function(n, rowst
   eQTL.combined$source[i] <<-"NephQTL"
 })
 
-
 # Get GWAS results for variants reported or mapped to Gene of Interest
 get_reported_gene_of_interest <- function(numreported){
   rows <-  ""
@@ -85,48 +84,13 @@ get_reported_gene_of_interest <- function(numreported){
 
 reported_gene_rows <- as.integer(get_reported_gene_of_interest(length(
   current_gwascat$`REPORTED GENE(S)`))[[1]])
-mapped_gene_rows <- which(current_gwascat$MAPPED_GENE == "MUC1")
+mapped_gene_rows <- which(current_gwascat$MAPPED_GENE == gene.of.interest)
 combined_gene_rows <- unique(append(mapped_gene_rows, reported_gene_rows))
-# Data frame with combined gene rows with gwas hits
-gwas.specific <- as.data.frame(current_gwascat[combined_gene_rows])
+# Data frame with all gwas hits mapped or reported to gene of interest
+gwas.all.hits <- as.data.frame(current_gwascat[combined_gene_rows])
 
-unique.strongest.risk.allele <- unique(gwas.specific$STRONGEST.SNP.RISK.ALLELE)
-gwas.txt.file <- gene.of.interest
-for(i in unique.strongest.risk.allele){
-  allele.rows <- which(gwas.specific$STRONGEST.SNP.RISK.ALLELE == i)
-  gwas.txt.file <- paste(gwas.txt.file, paste(
-    "RSid: ", i, "; Position (hg19): ",gwas.specific$seqname[allele.rows[1]], ":",
-    gwas.specific$start[allele.rows[1]], sep = ""), sep = "\n")
-  n <- 1
-  for(j in allele.rows){
-    row <- gwas.specific[j,]
-    entrez.var <- entrez_summary(db="pubmed", id=row$PUBMEDID)
-    gwas.txt.file <- paste(gwas.txt.file, "\n",
-      paste("\t", n, ") Study: ", entrez.var$title, sep = ""),
-      paste("First Author: ", entrez.var$firstauthor, ";   Last Author: ", entrez.var$lastauthor, sep = ""),
-      paste("Journal: ", entrez.var$fulljournalname,";    Date Published: ", entrez.var$pubdate, sep=""),
-      paste(entrez.var$articleids$idtype, ":", entrez.var$articleids$value,collapse = " ; "),
-      paste("Disease Trait: ", row$DISEASE.TRAIT, ";    Mapped Trait: ", row$MAPPED.TRAIT),
-      paste("Reported / Mapped Genes: ", gsub(",","; ",paste(unique(c(
-        row$REPORTED.GENE.S., row$MAPPED_GENE)), collapse = "; " )), sep = ""),
-      paste("Initial Sample Size: ", row$INITIAL.SAMPLE.SIZE,
-            ";     Replication Sample Size: ", row$REPLICATION.SAMPLE.SIZE, sep = ""),
-      paste("Risk Allele Frequency: ", row$RISK.ALLELE.FREQUENCY, sep = ""),
-      paste("Platform: ", strsplit(row$PLATFORM..SNPS.PASSING.QC., split = " ")[[1]][1],
-           ";    SNPs Passing WC: ", paste(strsplit(row$PLATFORM..SNPS.PASSING.QC., split = " ")[[1]][-1],
-                                           collapse = ""), sep= ""),
-      paste("P-Value: ", row$P.VALUE, ";    -log_10(P-Value): ", row$PVALUE_MLOG, ";   Odds Ratio / BETA: ",
-            row$OR.or.BETA, sep=""),
-      sep = "\n\t")
-    n <- n+1
-  }
-}
-gwas.txt.file.write <- file(paste(gwas.filepath, "gwas_", gene.of.interest, ".txt",sep = ""))
-writeLines(gwas.txt.file, gwas.txt.file.write)
-close(gwas.txt.file.write)
-
-gwas.variants <- data.frame(RSID = unique(gwas.specific$SNPS))
-
+# Condensed version of gwas.all.hits, where each variant postion has a row
+gwas.variants <- data.frame(RSID = unique(gwas.all.hits$SNPS))
 gwas.variants$chrom <- character(dim(gwas.variants)[1])
 gwas.variants$position <- character(dim(gwas.variants)[1])
 gwas.variants$all.studies  <- character(dim(gwas.variants)[1])
@@ -137,23 +101,23 @@ gwas.variants$risk.allele.T <- character(dim(gwas.variants)[1])
 gwas.variants$risk.allele.NA  <- character(dim(gwas.variants)[1])
 gwas.variants$pubmed.links  <- character(dim(gwas.variants)[1])
 get_risk_allele_string <- function(r, a){
-  allele.rows <- gwas.specific.rows[which(substring(
+  allele.rows <- gwas.all.hits.rows[which(substring(
     r$STRONGEST.SNP.RISK.ALLELE, first = str_length(r$STRONGEST.SNP.RISK.ALLELE[1])) == a),]
   return(paste("Disease Trait: ", allele.rows$DISEASE.TRAIT,"; P-Value: ", allele.rows$P.VALUE,
                "; -log_10(P-Value): ", allele.rows$PVALUE_MLOG, "; Odds Ratio / BETA: ", allele.rows$OR.or.BETA,
                "; 95% CI: ", allele.rows$X95..CI..TEXT., collapse = " | "))
 }
 for(i in 1:dim(gwas.variants)[1]){
-  gwas.specific.rows <- gwas.specific[which(gwas.specific$SNPS == gwas.variants$RSID[i]),]
-  gwas.variants$chrom[i] <- gwas.specific.rows$CHR_ID[1]
-  gwas.variants$position[i] <- gwas.specific.rows$start[1]
-  gwas.variants$all.studies[i]  <- paste(unique(gwas.specific.rows$STUDY), collapse = ";    ")
-  gwas.variants$risk.allele.A[i]  <- get_risk_allele_string(gwas.specific.rows, "A")
-  gwas.variants$risk.allele.C[i]  <- get_risk_allele_string(gwas.specific.rows, "C")
-  gwas.variants$risk.allele.G[i]  <- get_risk_allele_string(gwas.specific.rows, "G")
-  gwas.variants$risk.allele.T[i]  <- get_risk_allele_string(gwas.specific.rows, "T")
-  gwas.variants$risk.allele.NA[i]  <- get_risk_allele_string(gwas.specific.rows, "?")
-  gwas.variants$pubmed.links[i]  <- paste(gwas.specific.rows$LINK, collapse = " ; ")
+  gwas.all.hits.rows <- gwas.all.hits[which(gwas.all.hits$SNPS == gwas.variants$RSID[i]),]
+  gwas.variants$chrom[i] <- gwas.all.hits.rows$CHR_ID[1]
+  gwas.variants$position[i] <- gwas.all.hits.rows$start[1]
+  gwas.variants$all.studies[i]  <- paste(unique(gwas.all.hits.rows$STUDY), collapse = ";    ")
+  gwas.variants$risk.allele.A[i]  <- get_risk_allele_string(gwas.all.hits.rows, "A")
+  gwas.variants$risk.allele.C[i]  <- get_risk_allele_string(gwas.all.hits.rows, "C")
+  gwas.variants$risk.allele.G[i]  <- get_risk_allele_string(gwas.all.hits.rows, "G")
+  gwas.variants$risk.allele.T[i]  <- get_risk_allele_string(gwas.all.hits.rows, "T")
+  gwas.variants$risk.allele.NA[i]  <- get_risk_allele_string(gwas.all.hits.rows, "?")
+  gwas.variants$pubmed.links[i]  <- paste(gwas.all.hits.rows$LINK, collapse = " ; ")
 }
 
 
@@ -162,15 +126,11 @@ mart <- useEnsembl(biomart="ensembl", dataset="hsapiens_gene_ensembl", GRCh=37)
 minbase <- min( as.numeric(eQTL.combined$position))
 maxbase <- max( as.numeric(eQTL.combined$position))
 gene.image <- makeGene(id = gene.of.interest, type = "hgnc_symbol", biomart = mart)
-
-
 gene.of.interest.chrom <- eQTL.combined$chrom[1]
-
 genesplus <- makeGeneRegion(start = minbase, end = maxbase,
                             strand = "+", chromosome = gene.of.interest.chrom, biomart=mart)
 genesmin <- makeGeneRegion(start = minbase, end = maxbase,
                            strand = "-", chromosome = gene.of.interest.chrom, biomart=mart)
-
 expres.glom <- makeSegmentation(value = as.numeric(-log10(as.numeric(eQTL.combined$pvalue[
   which(eQTL.combined$compartment == "Glom")]))), start = as.numeric(
     eQTL.combined$position[which(eQTL.combined$compartment == "Glom")]),end = as.numeric(
@@ -187,6 +147,12 @@ legend = makeLegend(text = c('Tub','Glom', gene.of.interest),
 gdPlot(list(genesplus,genomeAxis,genesmin, "-log(P value)" = expres.tub, legend), overlays = gene.region.overlay,
        minBase = minbase, maxBase =maxbase, labelCex = 2)
 
+get_breaks<-function(minbase, maxbase){
+  lower <- floor(minbase/1000)*1000
+  upper <- ceiling(maxbase/1000)*1000
+  seglen <- (upper - lower) / 5
+  return(seq(from = lower, to = upper, by= seglen))
+}
 
 # Creates scatterplot of eQTL hits
 ggplot2::ggplot(eQTL.combined, ggplot2::aes(x = as.integer(position), y = -log10(as.numeric(eQTL.combined$pvalue)),
@@ -199,12 +165,7 @@ ggplot2::ggplot(eQTL.combined, ggplot2::aes(x = as.integer(position), y = -log10
   ggplot2::theme(plot.title = ggplot2::element_text(family = "Trebuchet MS", color="#666666", face="bold", size=18, hjust=0)) +
   ggplot2::theme(axis.title = ggplot2::element_text(family = "Trebuchet MS", color="#666666", face="bold", size=14))
 
-get_breaks<-function(minbase, maxbase){
-  lower <- floor(minbase/1000)*1000
-  upper <- ceiling(maxbase/1000)*1000
-  seglen <- (upper - lower) / 5
-  return(seq(from = lower, to = upper, by= seglen))
-}
+
 
 
 # Getting Start and End information for gene of interest
@@ -219,8 +180,8 @@ get_breaks<-function(minbase, maxbase){
 # gene.of.interest.end.GRCh38 <- getBM("end_position", filters="hgnc_symbol",
 #                                      values=gene.of.interest, mart=ensembl.GRCh38)[[1]]
 
-# gwas.specific$distance.GRCh37 <- numeric(dim(gwas_variants)[1])
-# gwas.specific$distance.GRCh38 <- numeric(dim(gwas_variants)[1])
+# gwas.all.hits$distance.GRCh37 <- numeric(dim(gwas_variants)[1])
+# gwas.all.hits$distance.GRCh38 <- numeric(dim(gwas_variants)[1])
 # get_distance_from_gene <- function(n){
 #   if(gwas_variants$Upstream[n]){
 #     gwas_variants$distance.GRCh37[n] <<- gwas_variants$position.GRCh37[n] -
