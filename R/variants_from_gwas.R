@@ -162,7 +162,7 @@ mart <- useEnsembl(biomart="ensembl", dataset="hsapiens_gene_ensembl", GRCh=37)
 minbase <- min( as.numeric(eQTL.combined$position))
 maxbase <- max( as.numeric(eQTL.combined$position))
 gene.image <- makeGene(id = gene.of.interest, type = "hgnc_symbol", biomart = mart)
-gdPlot(gene.image)
+
 
 gene.of.interest.chrom <- eQTL.combined$chrom[1]
 
@@ -170,15 +170,19 @@ genesplus <- makeGeneRegion(start = minbase, end = maxbase,
                             strand = "+", chromosome = gene.of.interest.chrom, biomart=mart)
 genesmin <- makeGeneRegion(start = minbase, end = maxbase,
                            strand = "-", chromosome = gene.of.interest.chrom, biomart=mart)
-
-
-expres <- makeGenericArray(intensity = as.matrix(-log10(as.numeric(eQTL.combined$pvalue))), probeStart = as.numeric(
-  eQTL.combined$position), dp = DisplayPars(type = "dot", lwd = 3))
+expres.glom <- makeSegmentation(value = as.numeric(-log10(as.numeric(eQTL.combined$pvalue[
+  which(eQTL.combined$compartment == "Glom")]))), start = as.numeric(
+    eQTL.combined$position[which(eQTL.combined$compartment == "Glom")]),end = as.numeric(
+    eQTL.combined$position[which(eQTL.combined$compartment == "Glom")]),dp = DisplayPars(color="darkblue", lwd = 3, lty=1))
+expres.tub <- makeGenericArray(intensity = as.matrix(-log10(as.numeric(eQTL.combined$pvalue[
+  which(eQTL.combined$compartment == "Tub")]))), probeStart = as.numeric(
+  eQTL.combined$position[which(eQTL.combined$compartment == "Tub")]), dp = DisplayPars(type = "dot", lwd = 3, pch = 5),
+  trackOverlay = expres.glom)
 genomeAxis <- makeGenomeAxis(add53 = TRUE, add35=TRUE)
 gene.region.overlay <- makeRectangleOverlay(start = 155158300, end = 155162706,
                                             dp = DisplayPars(fill = "yellow", alpha = 0.2, lty = "dashed"))
 
-gdPlot(list(b=genesplus,c=genomeAxis,d=genesmin, e = expres), overlays = gene.region.overlay,
+gdPlot(list(b=genesplus,c=genomeAxis,d=genesmin, e = expres.tub), overlays = gene.region.overlay,
        minBase = minbase, maxBase =maxbase, labelCex = 2)
 
 
