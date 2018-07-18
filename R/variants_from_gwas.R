@@ -12,6 +12,7 @@ library(magrittr)
 library(GenomeGraphs)
 library(ensembldb)
 library(ggplot2)
+library(httr)
 library(LDheatmap)
 
 # Run this only if this value doesn't already exist. It takes a while.
@@ -37,11 +38,12 @@ nephQTL.tub <- read.csv(paste(filepath, "tub_MatrixEQTL_", gene.of.interest,".cs
 if(!exists("mart")){
   mart <- useEnsembl(biomart="ensembl", dataset="hsapiens_gene_ensembl", GRCh=37)
 }
-gene.of.interest.info <- getBM(c("start_position", "end_position", "strand"), filters="hgnc_symbol",
-                               values=gene.of.interest, mart=mart)
+gene.of.interest.info <- getBM(c("start_position", "end_position", "strand", "chromosome_name"),
+                               filters="hgnc_symbol",values=gene.of.interest, mart=mart)
 gene.ofinterest.start <- gene.of.interest.info$start_position
 gene.ofinterest.strand <- gene.of.interest.info$strand
 gene.ofinterest.end <- gene.of.interest.info$end_position
+gene.of.interest.chrom <- gene.of.interest.info$chromosome_name
 
 ##############################################
 # Make table of eQTL positions/values
@@ -140,13 +142,14 @@ for(i in 1:dim(gwas.variants)[1]){
 # Getting LD Data
 ##################
 
+genomes.population <- "CEU" # Using Utah 1000 genomes data
+
 # Variants that are GWAS hits significant eQTL
 eQTL.gwas.combined.rsid <- intersect(gwas.variants$RSID, eQTL.combined$SNPid)
 eQTL.gwas.combined.LD.r2 <-matrix(nrow = length(eQTL.gwas.combined.rsid), ncol= length(eQTL.gwas.combined.rsid))
 eQTL.gwas.combined.LD.dprime <-matrix(nrow = length(eQTL.gwas.combined.rsid), ncol= length(eQTL.gwas.combined.rsid))
 colnames(eQTL.gwas.combined.LD.r2) <- colnames(eQTL.gwas.combined.LD.dprime) <- eQTL.gwas.combined.rsid
 rownames(eQTL.gwas.combined.LD.r2) <- rownames(eQTL.gwas.combined.LD.dprime) <- eQTL.gwas.combined.rsid
-genomes.population <- "CEU" # Using Utah 1000 genomes data
 for(i in 1:(length(eQTL.gwas.combined.rsid) - 1)){
   for(j in (i+1):length(eQTL.gwas.combined.rsid)){
     ensembl.ld.json <- read_json(paste("http://grch37.rest.ensembl.org/ld/human/pairwise/",
@@ -159,15 +162,53 @@ for(i in 1:(length(eQTL.gwas.combined.rsid) - 1)){
     }
   }
 }
+
+# LD data within 500 KB of the center of the gene of interest
 gene.of.interest.half <- (gene.ofinterest.start + gene.ofinterest.end) %/% 2
 start.500Kb <- gene.of.interest.half - 250000
 end.500Kb <- gene.of.interest.half + 250000
 LD.info.500Kb <- read_json(paste("http://grch37.rest.ensembl.org/ld/human/region/",gene.of.interest.chrom,":",
                                  start.500Kb,"..",end.500Kb -1,"/1000GENOMES:phase_3:",genomes.population,
                                  "?content-type=application/json",sep = ""))
-LD.r2.500Kb <- matrix(nrow = length(LD.info.500Kb), ncol= length(LD.info.500Kb))
-LD.dprime.500Kb <- matrix(nrow = length(LD.info.500Kb), ncol= length(LD.info.500Kb))
+LD.info.500Kb.length <- length(LD.info.500Kb)
+LD.info.500Kb.all.variants <- vector(length = 1e06)
+for(n in 1:LD.info.500Kb.length){
+  LD.info.500Kb.all.variants[n] <- (LD.info.500Kb[[n]]$variation1)
+  LD.info.500Kb.all.variants[LD.info.500Kb.length + n] <- print(LD.info.500Kb[[n]]$variation2)
+}
 
+LD.info.500Kb.unique.variants <- data.frame(rsid = unique(LD.info.500Kb.all.variants))
+LD.info.500Kb.unique.variants$position <- numeric(dim(LD.info.500Kb.unique.variants)[1])
+
+# Fetch Position from Ensembl using RSID
+server <- "http://grch37.rest.ensembl.org"
+ext <- "/variation/homo_sapiens"
+i <- 1
+while(i < dim(LD.info.500Kb.unique.variants)[1]){
+  j <- i + 190 # Ensembl takes at most 200 requests at a time.
+  if(j > dim(LD.info.500Kb.unique.variants)[1]){
+    j = dim(LD.info.500Kb.unique.variants)[1]
+  }
+  rest.api.response <- r <- POST(paste(server, ext, sep = ""), content_type("application/json"), accept("application/json"),
+                            body = paste('{ "ids" : [', paste0(LD.info.500Kb.unique.variants$rsid[i:j],
+                                                               collapse = "\",\""), ' ] }', sep = "\""))
+  rest.api.info <- fromJSON(toJSON(content(rest.api.response)))
+  for(k in 1:length(rest.api.info)){
+    LD.info.500Kb.unique.variants$position[k + i - 1] <- rest.api.info[[k]]$mappings$start[[1]]
+  }
+  i <- j + 1
+}
+
+# Get rid of 0s if applicable and sort ascending by position
+LD.info.500Kb.unique.variants <- LD.info.500Kb.unique.variants[which(LD.info.500Kb.unique.variants$position > 0),]
+LD.info.500Kb.unique.variants <- LD.info.500Kb.unique.variants[order(LD.info.500Kb.unique.variants$position),]
+
+
+LD.r2.500Kb <- matrix(nrow = dim(LD.info.500Kb.unique.variants)[1], ncol= dim(LD.info.500Kb.unique.variants)[1])
+LD.dprime.500Kb <- matrix(nrow = dim(LD.info.500Kb.unique.variants)[1], ncol= dim(LD.info.500Kb.unique.variants)[1])
+
+rownames(LD.r2.500Kb) <-colnames(LD.r2.500Kb) <- rownames(LD.dprime.500Kb) <- colnames(LD.dprime.500Kb) <-
+  LD.info.500Kb.unique.variants$rsid
 
 ##############
 # Gene Plot
@@ -176,7 +217,6 @@ LD.dprime.500Kb <- matrix(nrow = length(LD.info.500Kb), ncol= length(LD.info.500
 minbase <- min( as.numeric(eQTL.combined$position))
 maxbase <- max( as.numeric(eQTL.combined$position))
 gene.image <- makeGene(id = gene.of.interest, type = "hgnc_symbol", biomart = mart)
-gene.of.interest.chrom <- eQTL.combined$chrom[1]
 genesplus <- makeGeneRegion(start = minbase, end = maxbase,
                             strand = "+", chromosome = gene.of.interest.chrom, biomart=mart)
 genesmin <- makeGeneRegion(start = minbase, end = maxbase,
