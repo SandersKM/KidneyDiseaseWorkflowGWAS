@@ -120,8 +120,10 @@ for(i in 1:dim(gwas.variants)[1]){
   gwas.variants$pubmed.links[i]  <- paste(gwas.all.hits.rows$LINK, collapse = " ; ")
 }
 
-
+##############
 # Gene Plot
+##############
+
 mart <- useEnsembl(biomart="ensembl", dataset="hsapiens_gene_ensembl", GRCh=37)
 minbase <- min( as.numeric(eQTL.combined$position))
 maxbase <- max( as.numeric(eQTL.combined$position))
@@ -131,6 +133,7 @@ genesplus <- makeGeneRegion(start = minbase, end = maxbase,
                             strand = "+", chromosome = gene.of.interest.chrom, biomart=mart)
 genesmin <- makeGeneRegion(start = minbase, end = maxbase,
                            strand = "-", chromosome = gene.of.interest.chrom, biomart=mart)
+expres.gwas <- makeSegmentation(value = as.numeric(-log10()))
 expres.glom <- makeSegmentation(value = as.numeric(-log10(as.numeric(eQTL.combined$pvalue[
   which(eQTL.combined$compartment == "Glom")]))), start = as.numeric(
     eQTL.combined$position[which(eQTL.combined$compartment == "Glom")]),end = as.numeric(
@@ -144,8 +147,14 @@ gene.region.overlay <- makeRectangleOverlay(start = 155158300, end = 155162706,
                                             dp = DisplayPars(fill = "yellow", alpha = 0.2, lty = "dashed"))
 legend = makeLegend(text = c('Tub','Glom', gene.of.interest),
                     fill = c('darkred','darkblue', "lightyellow"), cex = 1)
+expres.gwas <- makeGenericArray(intensity = as.matrix(as.numeric(gwas.all.hits$PVALUE_MLOG)),
+                                probeStart = as.numeric(gwas.all.hits$start),
+                                dp = DisplayPars(color = "purple", lwd = 3, pch = "O"), pwd = 3)
 gdPlot(list(genesplus,genomeAxis,genesmin, "-log(P value)" = expres.tub, legend), overlays = gene.region.overlay,
        minBase = minbase, maxBase =maxbase, labelCex = 2)
+
+# gdPlot(list(genomeAxis, gene.image, expres.gwas), minBase = min(as.numeric(gwas.variants$position) ),
+#        maxBase = as.numeric(max(gwas.variants$position) ))
 
 get_breaks<-function(minbase, maxbase){
   lower <- floor(minbase/1000)*1000
