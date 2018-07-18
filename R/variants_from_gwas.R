@@ -33,6 +33,15 @@ nephQTL.glom <- read.csv(paste(filepath, "glom_MatrixEQTL_", gene.of.interest,".
                          header = TRUE, sep = ",")
 nephQTL.tub <- read.csv(paste(filepath, "tub_MatrixEQTL_", gene.of.interest,".csv", sep = ""),
                         header = TRUE, sep = ",")
+# Setting up biomart
+if(!exists("mart")){
+  mart <- useEnsembl(biomart="ensembl", dataset="hsapiens_gene_ensembl", GRCh=37)
+}
+gene.of.interest.info <- getBM(c("start_position", "end_position", "strand"), filters="hgnc_symbol",
+                               values=gene.of.interest, mart=mart)
+gene.ofinterest.start <- gene.of.interest.info$start_position
+gene.ofinterest.strand <- gene.of.interest.info$strand
+gene.ofinterest.end <- gene.of.interest.info$end_position
 
 ##############################################
 # Make table of eQTL positions/values
@@ -155,7 +164,6 @@ for(i in 1:(length(eQTL.gwas.combined.rsid) - 1)){
 # Gene Plot
 ##############
 
-mart <- useEnsembl(biomart="ensembl", dataset="hsapiens_gene_ensembl", GRCh=37)
 minbase <- min( as.numeric(eQTL.combined$position))
 maxbase <- max( as.numeric(eQTL.combined$position))
 gene.image <- makeGene(id = gene.of.interest, type = "hgnc_symbol", biomart = mart)
@@ -173,19 +181,28 @@ expres.tub <- makeGenericArray(intensity = as.matrix(-log10(as.numeric(eQTL.comb
   eQTL.combined$position[which(eQTL.combined$compartment == "Tub")]), dp = DisplayPars(type = "dot", lwd = 3, pch = 5),
   trackOverlay = expres.glom)
 genomeAxis <- makeGenomeAxis(add53 = TRUE, add35=TRUE)
-gene.region.overlay <- makeRectangleOverlay(start = 155158300, end = 155162706,
+gene.region.overlay <- makeRectangleOverlay(start = gene.ofinterest.start, end = gene.ofinterest.end,
                                             dp = DisplayPars(fill = "yellow", alpha = 0.2, lty = "dashed"))
 legend = makeLegend(text = c('Tub','Glom', gene.of.interest),
                     fill = c('darkred','darkblue', "lightyellow"), cex = 1)
-expres.gwas <- makeGenericArray(intensity = as.matrix(as.numeric(gwas.all.hits$PVALUE_MLOG)),
-                                probeStart = as.numeric(gwas.all.hits$start),
-                                dp = DisplayPars(color = "purple", lwd = 3, pch = "O"), pwd = 3)
 gdPlot(list(genesplus,genomeAxis,genesmin, "-log(P value)" = expres.tub, legend), overlays = gene.region.overlay,
        minBase = minbase, maxBase =maxbase, labelCex = 2)
 
-zoom.minbase <- gene.of.interest.start.GRCh37 - 100000
-zoom.maxbase <- gene.of.interest.end.GRCh37 + 100000
-gdPlot(list(gene.image, genomeAxis, "-log(P value)" = expres.tub, legend), overlays = gene.region.overlay,
+# Graph "zoomed in" to 100,000 range around gene
+zoom.minbase <- gene.of.interest.start - 100000
+zoom.maxbase <- gene.of.interest.end + 100000
+zoom.overlays <- vector(mode="list",length = dim(gwas.variants)[1] + 1)
+zoom.overlays[dim(gwas.variants)[1] + 1]<- makeRectangleOverlay(
+  start = gene.ofinterest.start,end = gene.ofinterest.end,
+  dp = DisplayPars(fill = "yellow", alpha = 0.2, lty = "dotted"), region = c(2,3))
+for(i in 1:dim(gwas.variants)[1]){
+  zoom.overlays[i]<- makeTextOverlay("o", xpos = as.numeric(gwas.variants$position[i]), ypos = .1,
+                                     coords = "genomic", dp = DisplayPars(color = "darkgreen", cex = 1.5))
+}
+zoom.legend = makeLegend(text = c('Tub','Glom', gene.of.interest, "GWAS"),
+                    fill = c('darkred','darkblue', "lightyellow", "darkgreen"), cex = 1)
+gdPlot(list(zoom.legend, "-log(P value)" = expres.tub, genomeAxis),
+       overlays = zoom.overlays,
        minBase = zoom.minbase, maxBase = zoom.maxbase, labelCex = 2)
 
 # gdPlot(list(genomeAxis, gene.image, expres.gwas), minBase = min(as.numeric(gwas.variants$position) ),
