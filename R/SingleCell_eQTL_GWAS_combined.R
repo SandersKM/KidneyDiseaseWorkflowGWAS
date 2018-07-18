@@ -34,11 +34,17 @@ sapply(2:dim(single.cell.all.genes)[2], function(n){
 })
 
 # Converting Mouse genes to Human Genes
-mart <- get0("mart", ifnotfound=useEnsembl(biomart="ensembl", dataset="hsapiens_gene_ensembl", GRCh=37))
-mouse.mart <- get0("mouse.mart", ifnotfound=useEnsembl(biomart="ensembl", dataset="mmusculus_gene_ensembl", GRCh=37))
-genesV2 <-get0("genesV2", ifnotfound = getLDS(attributes = "mgi_symbol", filters = "mgi_symbol",
-                                              values = single.cell.all.genes$mouse.gene, mart = mouse.mart,
-                                              attributesL = "hgnc_symbol", martL = mart, uniqueRows=T))
+if(!exists("mart")){
+  mart <- useEnsembl(biomart="ensembl", dataset="hsapiens_gene_ensembl", GRCh=37)
+}
+if(!exists("mouse.mart")){
+  mart <- useEnsembl(biomart="ensembl", dataset="mmusculus_gene_ensembl", GRCh=37)
+}
+if(!exists("genesV2")){
+genesV2 <-getLDS(attributes = "mgi_symbol", filters = "mgi_symbol",
+                 values = single.cell.all.genes$mouse.gene, mart = mouse.mart,
+                 attributesL = "hgnc_symbol", martL = mart, uniqueRows=T)
+}
 names(genesV2) <- c("mouse.gene", "human.gene")
 single.cell.all.genes <- merge(x = single.cell.all.genes, y = genesV2, by="mouse.gene",all.x=T, all.y = F)
 single.cell.all.genes <- single.cell.all.genes[,c(ncol(single.cell.all.genes),
