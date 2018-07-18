@@ -3,17 +3,16 @@
 # BSRP 2018
 ###################
 
-# library("car")
 # source("http://bioconductor.org/biocLite.R")
 # biocLite("GenomeGraphs")
-library(httr)
-library(xml2)
 library(jsonlite)
 library(rentrez)
 library(gwascat)
 library(magrittr)
 library(GenomeGraphs)
 library(ensembldb)
+library(ggplot2)
+library(LDheatmap)
 
 # Run this only if this value doesn't already exist. It takes a while.
 # current_gwascat <- makeCurrentGwascat(genome = "GRCh37")
@@ -35,13 +34,17 @@ nephQTL.glom <- read.csv(paste(filepath, "glom_MatrixEQTL_", gene.of.interest,".
 nephQTL.tub <- read.csv(paste(filepath, "tub_MatrixEQTL_", gene.of.interest,".csv", sep = ""),
                         header = TRUE, sep = ",")
 
-# Make general table of eQTL positions/values
+##############################################
+# Make table of eQTL positions/values
+##############################################
+
 total.rows <- dim(nephQTL.glom)[1] + dim(nephQTL.tub)[1]
 eQTL.combined <- data.frame(SNPid = character(total.rows), chrom = character(total.rows),
                             position = character(total.rows), ref = character(total.rows),
                             alt = character(total.rows), pvalue = character(total.rows),
                             beta = character(total.rows), compartment = character(total.rows),
                             source = character(total.rows), stringsAsFactors = FALSE)
+
 # filling with nephQTL glom and tub tables
 sapply(1:dim(nephQTL.glom)[1], function(n){
   eQTL.combined$SNPid[n] <<- toString(nephQTL.glom$dbSNPId[n])
@@ -69,7 +72,11 @@ sapply(1:dim(nephQTL.tub)[1], rowstart = dim(nephQTL.glom)[1], function(n, rowst
   eQTL.combined$source[i] <<-"NephQTL"
 })
 
+######################################################################
 # Get GWAS results for variants reported or mapped to Gene of Interest
+######################################################################
+
+
 get_reported_gene_of_interest <- function(numreported){
   rows <-  ""
   for(i in 1:numreported){
@@ -120,6 +127,30 @@ for(i in 1:dim(gwas.variants)[1]){
   gwas.variants$pubmed.links[i]  <- paste(gwas.all.hits.rows$LINK, collapse = " ; ")
 }
 
+##################
+# Getting LD Data
+##################
+
+# Variants that are GWAS hits significant eQTL
+eQTL.gwas.combined.rsid <- intersect(gwas.variants$RSID, eQTL.combined$SNPid)
+eQTL.gwas.combined.LD.r2 <-matrix(nrow = length(eQTL.gwas.combined.rsid), ncol= length(eQTL.gwas.combined.rsid))
+eQTL.gwas.combined.LD.dprime <-matrix(nrow = length(eQTL.gwas.combined.rsid), ncol= length(eQTL.gwas.combined.rsid))
+colnames(eQTL.gwas.combined.LD.r2) <- colnames(eQTL.gwas.combined.LD.dprime) <- eQTL.gwas.combined.rsid
+rownames(eQTL.gwas.combined.LD.r2) <- rownames(eQTL.gwas.combined.LD.dprime) <- eQTL.gwas.combined.rsid
+genomes.population <- "CEU" # Using Utah 1000 genomes data
+for(i in 1:(length(eQTL.gwas.combined.rsid) - 1)){
+  for(j in (i+1):length(eQTL.gwas.combined.rsid)){
+    ensembl.ld.json <- read_json(paste("http://grch37.rest.ensembl.org/ld/human/pairwise/",
+                                       eQTL.gwas.combined.rsid[i],"/",eQTL.gwas.combined.rsid[j],
+                                       "?content-type=application/json;population_name=1000GENOMES:",
+                                       "phase_3:",genomes.population,sep = ""))
+    if(length(ensembl.ld.json) > 0){
+      eQTL.gwas.combined.LD.r2[i,j] <- eQTL.gwas.combined.LD.r2[j, i] <- ensembl.ld.json[[1]]$r2
+      eQTL.gwas.combined.LD.dprime[i,j] <- eQTL.gwas.combined.LD.dprime[j, i] <- ensembl.ld.json[[1]]$d_prime
+    }
+  }
+}
+
 ##############
 # Gene Plot
 ##############
@@ -133,7 +164,6 @@ genesplus <- makeGeneRegion(start = minbase, end = maxbase,
                             strand = "+", chromosome = gene.of.interest.chrom, biomart=mart)
 genesmin <- makeGeneRegion(start = minbase, end = maxbase,
                            strand = "-", chromosome = gene.of.interest.chrom, biomart=mart)
-expres.gwas <- makeSegmentation(value = as.numeric(-log10()))
 expres.glom <- makeSegmentation(value = as.numeric(-log10(as.numeric(eQTL.combined$pvalue[
   which(eQTL.combined$compartment == "Glom")]))), start = as.numeric(
     eQTL.combined$position[which(eQTL.combined$compartment == "Glom")]),end = as.numeric(
@@ -152,6 +182,11 @@ expres.gwas <- makeGenericArray(intensity = as.matrix(as.numeric(gwas.all.hits$P
                                 dp = DisplayPars(color = "purple", lwd = 3, pch = "O"), pwd = 3)
 gdPlot(list(genesplus,genomeAxis,genesmin, "-log(P value)" = expres.tub, legend), overlays = gene.region.overlay,
        minBase = minbase, maxBase =maxbase, labelCex = 2)
+
+zoom.minbase <- gene.of.interest.start.GRCh37 - 100000
+zoom.maxbase <- gene.of.interest.end.GRCh37 + 100000
+gdPlot(list(gene.image, genomeAxis, "-log(P value)" = expres.tub, legend), overlays = gene.region.overlay,
+       minBase = zoom.minbase, maxBase = zoom.maxbase, labelCex = 2)
 
 # gdPlot(list(genomeAxis, gene.image, expres.gwas), minBase = min(as.numeric(gwas.variants$position) ),
 #        maxBase = as.numeric(max(gwas.variants$position) ))
