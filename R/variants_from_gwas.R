@@ -159,6 +159,15 @@ for(i in 1:(length(eQTL.gwas.combined.rsid) - 1)){
     }
   }
 }
+gene.of.interest.half <- (gene.ofinterest.start + gene.ofinterest.end) %/% 2
+start.500Kb <- gene.of.interest.half - 250000
+end.500Kb <- gene.of.interest.half + 250000
+LD.info.500Kb <- read_json(paste("http://grch37.rest.ensembl.org/ld/human/region/",gene.of.interest.chrom,":",
+                                 start.500Kb,"..",end.500Kb -1,"/1000GENOMES:phase_3:",genomes.population,
+                                 "?content-type=application/json",sep = ""))
+LD.r2.500Kb <- matrix(nrow = length(LD.info.500Kb), ncol= length(LD.info.500Kb))
+LD.dprime.500Kb <- matrix(nrow = length(LD.info.500Kb), ncol= length(LD.info.500Kb))
+
 
 ##############
 # Gene Plot
