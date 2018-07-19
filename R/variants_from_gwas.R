@@ -5,6 +5,8 @@
 
 # source("http://bioconductor.org/biocLite.R")
 # biocLite("GenomeGraphs")
+# install.packages("devtools")
+# devtools::install_github("rlbarter/superheat")
 library(jsonlite)
 library(rentrez)
 library(gwascat)
@@ -13,7 +15,9 @@ library(GenomeGraphs)
 library(ensembldb)
 library(ggplot2)
 library(httr)
-library(LDheatmap)
+library(ComplexHeatmap)
+library(circlize)
+library(stringi)
 
 # Run this only if this value doesn't already exist. It takes a while.
 # current_gwascat <- makeCurrentGwascat(genome = "GRCh37")
@@ -40,9 +44,9 @@ if(!exists("mart")){
 }
 gene.of.interest.info <- getBM(c("start_position", "end_position", "strand", "chromosome_name"),
                                filters="hgnc_symbol",values=gene.of.interest, mart=mart)
-gene.ofinterest.start <- gene.of.interest.info$start_position
-gene.ofinterest.strand <- gene.of.interest.info$strand
-gene.ofinterest.end <- gene.of.interest.info$end_position
+gene.of.interest.start <- gene.of.interest.info$start_position
+gene.of.interest.strand <- gene.of.interest.info$strand
+gene.of.interest.end <- gene.of.interest.info$end_position
 gene.of.interest.chrom <- gene.of.interest.info$chromosome_name
 
 ##############################################
@@ -120,7 +124,7 @@ gwas.variants$risk.allele.NA  <- character(dim(gwas.variants)[1])
 gwas.variants$pubmed.links  <- character(dim(gwas.variants)[1])
 get_risk_allele_string <- function(r, a){
   allele.rows <- gwas.all.hits.rows[which(substring(
-    r$STRONGEST.SNP.RISK.ALLELE, first = str_length(r$STRONGEST.SNP.RISK.ALLELE[1])) == a),]
+    r$STRONGEST.SNP.RISK.ALLELE, first = stri_length(r$STRONGEST.SNP.RISK.ALLELE[1])) == a),]
   return(paste("Disease Trait: ", allele.rows$DISEASE.TRAIT,"; P-Value: ", allele.rows$P.VALUE,
                "; -log_10(P-Value): ", allele.rows$PVALUE_MLOG, "; Odds Ratio / BETA: ", allele.rows$OR.or.BETA,
                "; 95% CI: ", allele.rows$X95..CI..TEXT., collapse = " | "))
@@ -164,7 +168,7 @@ for(i in 1:(length(eQTL.gwas.combined.rsid) - 1)){
 }
 
 # LD data within 500 KB of the center of the gene of interest
-gene.of.interest.half <- (gene.ofinterest.start + gene.ofinterest.end) %/% 2
+gene.of.interest.half <- (gene.of.interest.start + gene.of.interest.end) %/% 2
 start.500Kb <- gene.of.interest.half - 250000
 end.500Kb <- gene.of.interest.half + 250000
 LD.info.500Kb <- read_json(paste("http://grch37.rest.ensembl.org/ld/human/region/",gene.of.interest.chrom,":",
@@ -174,7 +178,7 @@ LD.info.500Kb.length <- length(LD.info.500Kb)
 LD.info.500Kb.all.variants <- vector(length = 1e06)
 for(n in 1:LD.info.500Kb.length){
   LD.info.500Kb.all.variants[n] <- (LD.info.500Kb[[n]]$variation1)
-  LD.info.500Kb.all.variants[LD.info.500Kb.length + n] <- print(LD.info.500Kb[[n]]$variation2)
+  LD.info.500Kb.all.variants[LD.info.500Kb.length + n] <- (LD.info.500Kb[[n]]$variation2)
 }
 
 LD.info.500Kb.unique.variants <- data.frame(rsid = unique(LD.info.500Kb.all.variants))
@@ -204,11 +208,46 @@ LD.info.500Kb.unique.variants <- LD.info.500Kb.unique.variants[which(LD.info.500
 LD.info.500Kb.unique.variants <- LD.info.500Kb.unique.variants[order(LD.info.500Kb.unique.variants$position),]
 
 
-LD.r2.500Kb <- matrix(nrow = dim(LD.info.500Kb.unique.variants)[1], ncol= dim(LD.info.500Kb.unique.variants)[1])
-LD.dprime.500Kb <- matrix(nrow = dim(LD.info.500Kb.unique.variants)[1], ncol= dim(LD.info.500Kb.unique.variants)[1])
+LD.r2.500Kb <- matrix(0,nrow = dim(LD.info.500Kb.unique.variants)[1], ncol= dim(LD.info.500Kb.unique.variants)[1])
+LD.dprime.500Kb <- matrix(0,nrow = dim(LD.info.500Kb.unique.variants)[1], ncol= dim(LD.info.500Kb.unique.variants)[1])
+
+LD.500Kb = data.frame(from = character(length(LD.info.500Kb)),
+                to = character(length(LD.info.500Kb)),
+                r2 = numeric(length(LD.info.500Kb)),
+                dprime = numeric(length(LD.info.500Kb)),
+                position.from = numeric(length(LD.info.500Kb)),
+                position.to = numeric(length(LD.info.500Kb)),
+                stringsAsFactors = FALSE)
 
 rownames(LD.r2.500Kb) <-colnames(LD.r2.500Kb) <- rownames(LD.dprime.500Kb) <- colnames(LD.dprime.500Kb) <-
   LD.info.500Kb.unique.variants$rsid
+
+j<-1
+for (i in LD.info.500Kb) {
+  LD.r2.500Kb[i$variation1,i$variation2] <- LD.r2.500Kb[i$variation2,i$variation1] <- as.numeric(i$r2)
+  LD.dprime.500Kb[i$variation1,i$variation2] <- LD.dprime.500Kb[i$variation2,i$variation1] <-
+    as.numeric(i$d_prime)
+  LD.500Kb$from[j] <- i$variation1
+  LD.500Kb$position.from[j] <- LD.info.500Kb.unique.variants$position[
+    which(LD.info.500Kb.unique.variants$rsid == i$variation1)]
+  LD.500Kb$to[j]<-i$variation2
+  LD.500Kb$position.to[j] <- LD.info.500Kb.unique.variants$position[
+    which(LD.info.500Kb.unique.variants$rsid == i$variation2)]
+  LD.500Kb$r2[j] <- as.numeric(i$r2)
+  LD.500Kb$dprime[j] <- as.numeric(i$d_prime)
+  j <- j + 1
+}
+
+i<-data.frame(rsid = names(LD.r2.500Kb[gwas.variants$RSID[1],]),r2 = LD.r2.500Kb[gwas.variants$RSID[1],],
+              row.names = NULL)
+i <- i[which(i$r2 > 0),]
+i <- i[order(i$r2, decreasing = TRUE),]
+
+j<-data.frame(rsid = names(LD.r2.500Kb[gwas.variants$RSID[2],]),r2 = LD.r2.500Kb[gwas.variants$RSID[2],],
+              row.names = NULL)
+j <- j[which(j$r2 > 0),]
+j<- j[order(j$r2, decreasing = TRUE),]
+
 
 ##############
 # Gene Plot
@@ -238,11 +277,11 @@ gdPlot(list(genesplus,genomeAxis,genesmin, "-log(P value)" = expres.tub, legend)
        minBase = minbase, maxBase =maxbase, labelCex = 2)
 
 # Graph "zoomed in" to 100,000 range around gene
-zoom.minbase <- gene.of.interest.start - 100000
-zoom.maxbase <- gene.of.interest.end + 100000
+zoom.minbase <- gene.of.interest.start - 10000
+zoom.maxbase <- gene.of.interest.end + 10000
 zoom.overlays <- vector(mode="list",length = dim(gwas.variants)[1] + 1)
 zoom.overlays[dim(gwas.variants)[1] + 1]<- makeRectangleOverlay(
-  start = gene.ofinterest.start,end = gene.ofinterest.end,
+  start = gene.of.interest.start,end = gene.of.interest.end,
   dp = DisplayPars(fill = "yellow", alpha = 0.2, lty = "dotted"), region = c(2,3))
 for(i in 1:dim(gwas.variants)[1]){
   zoom.overlays[i]<- makeTextOverlay("o", xpos = as.numeric(gwas.variants$position[i]), ypos = .1,
@@ -317,4 +356,70 @@ ggplot2::ggplot(eQTL.combined, ggplot2::aes(x = as.integer(position), y = -log10
 #                                                        $isClosestGene == TRUE)]))))
 # })
 
+zoom.ld <- LD.500Kb[which(LD.500Kb$position.from < zoom.maxbase & LD.500Kb$position.from > zoom.minbase &
+                            LD.500Kb$position.to < zoom.maxbase & LD.500Kb$position.to > zoom.minbase ),]
 
+
+ld.eqtl.overlap <- LD.500Kb[which(LD.500Kb$from %in% eQTL.combined$SNPid & LD.500Kb$to %in% eQTL.combined$SNPid),]
+
+zoom.ld.eqtl.overlap <- ld.eqtl.overlap[which(ld.eqtl.overlap$position.from < zoom.maxbase &
+                                                ld.eqtl.overlap$position.from > zoom.minbase &
+                                                ld.eqtl.overlap$position.to < zoom.maxbase &
+                                                ld.eqtl.overlap$position.to > zoom.minbase ),]
+
+zoom.ld.eqtl.overlap.r2 <- matrix(0, nrow = length(unique(
+  union(zoom.ld.eqtl.overlap$to, zoom.ld.eqtl.overlap$from))),
+  ncol = length(unique(union(zoom.ld.eqtl.overlap$to, zoom.ld.eqtl.overlap$from))),
+  dimnames = list(unique(union(zoom.ld.eqtl.overlap$to, zoom.ld.eqtl.overlap$from))[order(LD.info.500Kb.unique.variants$position[
+    match(unique(union(zoom.ld.eqtl.overlap$to, zoom.ld.eqtl.overlap$from)), LD.info.500Kb.unique.variants$rsid)])],
+    unique(union(zoom.ld.eqtl.overlap$to, zoom.ld.eqtl.overlap$from))[order(LD.info.500Kb.unique.variants$position[
+      match(unique(union(zoom.ld.eqtl.overlap$to, zoom.ld.eqtl.overlap$from)), LD.info.500Kb.unique.variants$rsid)])]))
+
+for(i in 1:dim(zoom.ld.eqtl.overlap)[1]){
+  zoom.ld.eqtl.overlap.r2[zoom.ld.eqtl.overlap$from[i], zoom.ld.eqtl.overlap$to[i]]<-
+    zoom.ld.eqtl.overlap.r2[zoom.ld.eqtl.overlap$to[i],zoom.ld.eqtl.overlap$from[i]] <-
+                                zoom.ld.eqtl.overlap$r2[i]
+}
+
+zoom.ld.eqtl.overlap.r2[lower.tri(zoom.ld.eqtl.overlap.r2)] = 0
+col_fun = colorRamp2(c( 0, 1), c("white", "darkred"), transparency = 0.5)
+Heatmap(zoom.ld.eqtl.overlap.r2, name = "corr", col = col_fun, cluster_rows = FALSE, cluster_columns = FALSE,
+        show_row_names = FALSE, show_column_names = FALSE, show_column_dend = TRUE)
+
+chordDiagram(zoom.ld.eqtl.overlap.r2, col= col_fun(zoom.ld.eqtl.overlap.r2),
+             annotationTrack = c( "grid"),annotationTrackHeight = c(0.03, 0.01),
+             grid.col = NA, grid.border = "black",
+             preAllocateTracks = list(track.height = max(strwidth(unlist(dimnames(zoom.ld.eqtl.overlap.r2))))))
+circos.track(track.index = 1, panel.fun = function(x, y) {
+  circos.text(CELL_META$xcenter, CELL_META$ylim[1], CELL_META$sector.index,
+              facing = "clockwise", niceFacing = TRUE, adj = c(0, 0.5))}, bg.border = NA)
+
+# eqtl.combined.tub <- eQTL.combined[which(eQTL.combined$compartment == "Tub"),]
+# eqtl.combined.tub$pvalue <- as.numeric(as.character(eqtl.combined.tub$pvalue))
+# eqtl.combined.tub$Mlog <- -log10(eqtl.combined.tub$pvalue)
+# eqtl.combined.tub.length <- dim(eqtl.combined.tub)[1]
+# eqtl.combined.glom <- eQTL.combined[which(eQTL.combined$compartment == "Glom"),]
+# eqtl.combined.glom$pvalue <- as.numeric(as.character(eqtl.combined.glom$pvalue))
+# eqtl.combined.glom$Mlog <- -log10(eqtl.combined.glom$pvalue)
+# eqtl.combined.glom.length <- dim(eqtl.combined.glom)[1]
+# bed.eqtl.tub <- data.frame(chr = character(eqtl.combined.tub.length),
+#                             start = as.integer(eqtl.combined.tub$position),
+#                             end = as.integer(eqtl.combined.tub$position),
+#                             value = eqtl.combined.tub$pvalue, stringsAsFactors = FALSE)
+# bed.eqtl.glom <- data.frame(chr = character(eqtl.combined.glom.length),
+#                            start = as.integer(eqtl.combined.glom$position),
+#                            end = as.integer(eqtl.combined.glom$position),
+#                            value = eqtl.combined.glom$pvalue, stringsAsFactors = FALSE)
+# bed.eqtl.glom$chr <- bed.eqtl.tub$chr <- paste("chr", gene.of.interest.chrom, sep = "")
+#
+# bed.list.eqtl <- list(bed.eqtl.glom, bed.eqtl.tub)
+#
+# circos.clear()
+# basetrack = data.frame(
+#   name  = paste("Chrom. ",gene.of.interest.chrom, sep = ""),
+#   start = c(minbase),
+#   end   = c(maxbase))
+# circos.par("gap.degree" = rep(5),"start.degree" = 90)
+# #circos.initializeWithIdeogram(chromosome.index = "chr1")
+# circos.genomicInitialize(basetrack)
+# circos.genomicTrackPlotRegion(bed.list.eqtl)
