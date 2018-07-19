@@ -3,11 +3,13 @@
 # BSRP 2018
 ###################
 
-
+# source("http://bioconductor.org/biocLite.R")
+# biocLite("biomaRt")
 library(gwascat)
 library(scater)
 library(readxl)
 library(stringi)
+library(biomaRt)
 
 # Replace the following with the specific gwas traits of interest
 gwas.traits.of.interest <- c("Chronic kidney disease (chronic kidney disease vs normal
@@ -38,7 +40,7 @@ if(!exists("mart")){
   mart <- useEnsembl(biomart="ensembl", dataset="hsapiens_gene_ensembl", GRCh=37)
 }
 if(!exists("mouse.mart")){
-  mart <- useEnsembl(biomart="ensembl", dataset="mmusculus_gene_ensembl", GRCh=37)
+  mouse.mart <- useEnsembl(biomart="ensembl", dataset="mmusculus_gene_ensembl", GRCh=37)
 }
 if(!exists("genesV2")){
 genesV2 <-getLDS(attributes = "mgi_symbol", filters = "mgi_symbol",
