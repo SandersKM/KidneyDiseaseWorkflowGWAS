@@ -12,12 +12,8 @@ library(stringi)
 library(biomaRt)
 
 # Replace the following with the specific gwas traits of interest
-gwas.traits.of.interest <- c("Chronic kidney disease (chronic kidney disease vs normal
-                             or mildly reduced eGFR) in type 1 diabetes","Chronic kidney disease
-                             (severe chronic kidney disease vs normal kidney function) in type 1 diabetes")
-
-# Run this only if this value doesn't already exist. It takes a while.
-# current_gwascat <- makeCurrentGwascat(genome = "GRCh37")
+gwas.traits.of.interest <- c("Chronic kidney disease (chronic kidney disease vs normal or mildly reduced eGFR) in type 1 diabetes",
+"Chronic kidney disease (severe chronic kidney disease vs normal kidney function) in type 1 diabetes")
 
 # Enter the filepath you would like all documents produced to go to
 gwas.filepath <- "/Users/ksanders/Documents/"
@@ -33,17 +29,26 @@ sapply(2:dim(single.cell.all.genes)[2], function(n){
   name.paren <- paste(strsplit(names(single.cell.all.genes)[n], split = " ")[[1]][-1], collapse = "-")
   colnames(single.cell.all.genes)[colnames(single.cell.all.genes)==names(single.cell.all.genes)[n]] <<-
     substring(name.paren, first = 2, last = stri_length(name.paren) - 1)
+  single.cell.all.genes[[n]] <<- as.numeric(single.cell.all.genes[[n]])
 })
 
-# Converting Mouse genes to Human Genes
+# Loading current GWAS Cateloge information.
+# Do this every few months, but be warned it take a long time to load
+if(!exists("current_gwascat")){
+  current_gwascat <- makeCurrentGwascat(genome = "GRCh37")
+}
+
+# Getting Human genome information
 if(!exists("mart")){
   mart <- useEnsembl(biomart="ensembl", dataset="hsapiens_gene_ensembl", GRCh=37)
 }
+# Getting Mouse genome information
 if(!exists("mouse.mart")){
   mouse.mart <- useEnsembl(biomart="ensembl", dataset="mmusculus_gene_ensembl", GRCh=37)
 }
+# converting mouse gene names to human gene names
 if(!exists("genesV2")){
-genesV2 <-getLDS(attributes = "mgi_symbol", filters = "mgi_symbol",
+  genesV2 <-getLDS(attributes = "mgi_symbol", filters = "mgi_symbol",
                  values = single.cell.all.genes$mouse.gene, mart = mouse.mart,
                  attributesL = "hgnc_symbol", martL = mart, uniqueRows=T)
 }
@@ -54,6 +59,10 @@ single.cell.all.genes <- single.cell.all.genes[,c(ncol(single.cell.all.genes),
 
 # search for gwas hits
 gwas.hits.by.trait <- subsetByTraits(current_gwascat, tr = gwas.traits.of.interest)
+
+gwas.mapped.genes <- union(gwas.hits.by.trait$MAPPED_GENE, gwas.hits.by.trait$`REPORTED GENE(S)`)
+gwas.mapped.genes <- unique(unlist(strsplit(gsub(",", " -", gwas.mapped.genes), split = " - ")))
+gwas.mapped.genes <- gwas.mapped.genes[gwas.mapped.genes != "NR"]
 
 
 
