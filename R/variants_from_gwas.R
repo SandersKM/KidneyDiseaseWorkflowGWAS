@@ -7,6 +7,7 @@
 # biocLite("GenomeGraphs")
 # install.packages("devtools")
 # devtools::install_github("rlbarter/superheat")
+# install_github('arcdiagram',  username='gastonstat')
 library(jsonlite)
 library(rentrez)
 library(gwascat)
@@ -18,6 +19,7 @@ library(httr)
 library(ComplexHeatmap)
 library(circlize)
 library(stringi)
+library(arcdiagram)
 
 # Run this only if this value doesn't already exist. It takes a while.
 # current_gwascat <- makeCurrentGwascat(genome = "GRCh37")
@@ -277,8 +279,8 @@ gdPlot(list(genesplus,genomeAxis,genesmin, "-log(P value)" = expres.tub, legend)
        minBase = minbase, maxBase =maxbase, labelCex = 2)
 
 # Graph "zoomed in" to 100,000 range around gene
-zoom.minbase <- gene.of.interest.start - 10000
-zoom.maxbase <- gene.of.interest.end + 10000
+zoom.minbase <- gene.of.interest.start - 15000
+zoom.maxbase <- gene.of.interest.end + 15000
 zoom.overlays <- vector(mode="list",length = dim(gwas.variants)[1] + 1)
 zoom.overlays[dim(gwas.variants)[1] + 1]<- makeRectangleOverlay(
   start = gene.of.interest.start,end = gene.of.interest.end,
@@ -381,10 +383,17 @@ for(i in 1:dim(zoom.ld.eqtl.overlap)[1]){
                                 zoom.ld.eqtl.overlap$r2[i]
 }
 
+annot <- HeatmapAnnotation("-log10(Pvalue)" = anno_points(eqtl.combined.tub$Mlog[
+  match(rownames(zoom.ld.eqtl.overlap.r2),eqtl.combined.tub$SNPid)],axis = TRUE, axis_side = "right",
+  which = "column",annotation_height = unit(c(5), "cm"), ylim = c(0, 5)), show_annotation_name = TRUE,
+  annotation_name_rot = 0, annotation_name_offset = unit(8, "mm"))
+
 zoom.ld.eqtl.overlap.r2[lower.tri(zoom.ld.eqtl.overlap.r2)] = 0
 col_fun = colorRamp2(c( 0, 1), c("white", "darkred"), transparency = 0.5)
-Heatmap(zoom.ld.eqtl.overlap.r2, name = "corr", col = col_fun, cluster_rows = FALSE, cluster_columns = FALSE,
-        show_row_names = FALSE, show_column_names = FALSE, show_column_dend = TRUE)
+Heatmap(zoom.ld.eqtl.overlap.r2, name = "LD R2", col = col_fun, cluster_rows = FALSE, cluster_columns = FALSE,
+        show_row_names = TRUE, show_column_names = TRUE, show_column_dend = TRUE, top_annotation = annot,
+        top_annotation_height = unit(2, "cm"))
+
 
 chordDiagram(zoom.ld.eqtl.overlap.r2, col= col_fun(zoom.ld.eqtl.overlap.r2),
              annotationTrack = c( "grid"),annotationTrackHeight = c(0.03, 0.01),
@@ -414,12 +423,21 @@ circos.track(track.index = 1, panel.fun = function(x, y) {
 #
 # bed.list.eqtl <- list(bed.eqtl.glom, bed.eqtl.tub)
 #
-# circos.clear()
-# basetrack = data.frame(
-#   name  = paste("Chrom. ",gene.of.interest.chrom, sep = ""),
-#   start = c(minbase),
-#   end   = c(maxbase))
-# circos.par("gap.degree" = rep(5),"start.degree" = 90)
-# #circos.initializeWithIdeogram(chromosome.index = "chr1")
-# circos.genomicInitialize(basetrack)
-# circos.genomicTrackPlotRegion(bed.list.eqtl)
+circos.clear()
+basetrack = data.frame(
+  name  = paste("Chrom. ",gene.of.interest.chrom, sep = ""),
+  start = c(minbase),
+  end   = c(maxbase))
+circos.par("gap.degree" = rep(5),"start.degree" = 90)
+circos.initializeWithIdeogram(chromosome.index = "chr1")
+circos.genomicInitialize(basetrack)
+circos.genomicTrackPlotRegion(bed.list.eqtl)
+
+zoom.ld.eqtl.overlap.positions <- LD.info.500Kb.unique.variants$position[
+  match(unique(union(zoom.ld.eqtl.overlap$to, zoom.ld.eqtl.overlap$from)),
+        LD.info.500Kb.unique.variants$rsid)]
+edgelist <- cbind(zoom.ld.eqtl.overlap$from, zoom.ld.eqtl.overlap$to)
+arcplot(edgelist, vertices = unique(union(zoom.ld.eqtl.overlap$to, zoom.ld.eqtl.overlap$from)),
+        ordering = unique(union(zoom.ld.eqtl.overlap$to, zoom.ld.eqtl.overlap$from))[
+          order(zoom.ld.eqtl.overlap.positions)])
+
