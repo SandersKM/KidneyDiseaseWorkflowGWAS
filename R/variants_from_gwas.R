@@ -21,9 +21,6 @@ library(circlize)
 library(stringi)
 library(arcdiagram)
 
-# Run this only if this value doesn't already exist. It takes a while.
-# current_gwascat <- makeCurrentGwascat(genome = "GRCh37")
-
 # Enter the HGNC symbol of the gene of interest below
 gene.of.interest <- "MUC1"
 
@@ -93,6 +90,11 @@ sapply(1:dim(nephQTL.tub)[1], rowstart = dim(nephQTL.glom)[1], function(n, rowst
 # Get GWAS results for variants reported or mapped to Gene of Interest
 ######################################################################
 
+# Loading current GWAS Cateloge information.
+# Do this every few months, but be warned it take a long time to load
+if(!exists("current_gwascat")){
+  current_gwascat <- makeCurrentGwascat(genome = "GRCh37")
+}
 
 get_reported_gene_of_interest <- function(numreported){
   rows <-  ""
@@ -271,11 +273,20 @@ expres.tub <- makeGenericArray(intensity = as.matrix(-log10(as.numeric(eQTL.comb
   eQTL.combined$position[which(eQTL.combined$compartment == "Tub")]), dp = DisplayPars(type = "dot", lwd = 3, pch = 5),
   trackOverlay = expres.glom)
 genomeAxis <- makeGenomeAxis(add53 = TRUE, add35=TRUE)
-gene.region.overlay <- makeRectangleOverlay(start = gene.ofinterest.start, end = gene.ofinterest.end,
+gene.region.overlay <- makeRectangleOverlay(start = gene.of.interest.start, end = gene.of.interest.end,
                                             dp = DisplayPars(fill = "yellow", alpha = 0.2, lty = "dashed"))
-legend = makeLegend(text = c('Tub','Glom', gene.of.interest),
-                    fill = c('darkred','darkblue', "lightyellow"), cex = 1)
-gdPlot(list(genesplus,genomeAxis,genesmin, "-log(P value)" = expres.tub, legend), overlays = gene.region.overlay,
+legend = makeLegend(text = c('Tub','Glom', "GWAS", gene.of.interest),
+                    fill = c('darkred','darkblue', "darkgreen", "lightyellow"), cex = 1)
+
+overlays <- vector(mode="list",length = dim(gwas.variants)[1] + 1)
+overlays[dim(gwas.variants)[1] + 1]<- makeRectangleOverlay(
+  start = gene.of.interest.start,end = gene.of.interest.end,
+  dp = DisplayPars(fill = "yellow", alpha = 0.2, lty = "dotted"), region = c(2,3))
+for(i in 1:dim(gwas.variants)[1]){
+  overlays[i]<- makeTextOverlay("o", xpos = as.numeric(gwas.variants$position[i]), ypos = .13,
+                                     coords = "genomic", dp = DisplayPars(color = "darkgreen", cex = 1.5))
+}
+gdPlot(list(legend,"-log(P value)" = expres.tub, BP = genomeAxis), overlays = overlays,
        minBase = minbase, maxBase =maxbase, labelCex = 2)
 
 # Graph "zoomed in" to 100,000 range around gene
