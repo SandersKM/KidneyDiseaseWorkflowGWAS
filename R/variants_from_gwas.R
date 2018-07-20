@@ -21,11 +21,15 @@ library(circlize)
 library(stringi)
 library(arcdiagram)
 
+####################
+# User Input
+####################
+
 # Enter the HGNC symbol of the gene of interest below
 gene.of.interest <- "MUC1"
 
 # Enter the filepath you would like all documents produced to go to
-gwas.filepath <- "/Users/ksanders/Documents/"
+output.dir <- "/Users/ksanders/Documents/"
 
 # This will bring you to the nephvs eQTL webpage
 browseURL(paste("http://eqtl.nephvs.org/searchResult/", gene.of.interest, sep = ""))
@@ -33,10 +37,21 @@ browseURL(paste("http://eqtl.nephvs.org/searchResult/", gene.of.interest, sep = 
 filepath <- "/Users/ksanders/Desktop/"
 
 # Read in the NephQTL data
+# Change filename (arg 2) if it is different from below
 nephQTL.glom <- read.csv(paste(filepath, "glom_MatrixEQTL_", gene.of.interest,".csv", sep = ""),
                          header = TRUE, sep = ",")
 nephQTL.tub <- read.csv(paste(filepath, "tub_MatrixEQTL_", gene.of.interest,".csv", sep = ""),
                         header = TRUE, sep = ",")
+
+# 1000 Genomes Project population. Descriptions of populations:
+# http://grch37.rest.ensembl.org/documentation/info/variation_populations
+# Currently using Utah 1000 genomes data
+genomes.population <- "CEU"
+
+#####################
+# BioMart Gene Info
+#####################
+
 # Setting up biomart
 if(!exists("mart")){
   mart <- useEnsembl(biomart="ensembl", dataset="hsapiens_gene_ensembl", GRCh=37)
@@ -48,10 +63,11 @@ gene.of.interest.strand <- gene.of.interest.info$strand
 gene.of.interest.end <- gene.of.interest.info$end_position
 gene.of.interest.chrom <- gene.of.interest.info$chromosome_name
 
-##############################################
+########################################
 # Make table of eQTL positions/values
-##############################################
+########################################
 
+# Initialize combined dataframe
 total.rows <- dim(nephQTL.glom)[1] + dim(nephQTL.tub)[1]
 eQTL.combined <- data.frame(SNPid = character(total.rows), chrom = character(total.rows),
                             position = character(total.rows), ref = character(total.rows),
@@ -90,8 +106,8 @@ sapply(1:dim(nephQTL.tub)[1], rowstart = dim(nephQTL.glom)[1], function(n, rowst
 # Get GWAS results for variants reported or mapped to Gene of Interest
 ######################################################################
 
-# Loading current GWAS Cateloge information.
-# Do this every few months, but be warned it take a long time to load
+# Loading current GWAS Catelogue information.
+# Do this every few months, but be warned it takes a long time to load
 if(!exists("current_gwascat")){
   current_gwascat <- makeCurrentGwascat(genome = "GRCh37")
 }
@@ -112,6 +128,7 @@ reported_gene_rows <- as.integer(get_reported_gene_of_interest(length(
   current_gwascat$`REPORTED GENE(S)`))[[1]])
 mapped_gene_rows <- which(current_gwascat$MAPPED_GENE == gene.of.interest)
 combined_gene_rows <- unique(append(mapped_gene_rows, reported_gene_rows))
+
 # Data frame with all gwas hits mapped or reported to gene of interest
 gwas.all.hits <- as.data.frame(current_gwascat[combined_gene_rows])
 
@@ -150,12 +167,10 @@ for(i in 1:dim(gwas.variants)[1]){
 # Getting LD Data
 ##################
 
-genomes.population <- "CEU" # Using Utah 1000 genomes data
-
-# Variants that are GWAS hits significant eQTL
+# Variants that are GWAS hits with significant eQTL
 eQTL.gwas.combined.rsid <- intersect(gwas.variants$RSID, eQTL.combined$SNPid)
-eQTL.gwas.combined.LD.r2 <-matrix(nrow = length(eQTL.gwas.combined.rsid), ncol= length(eQTL.gwas.combined.rsid))
-eQTL.gwas.combined.LD.dprime <-matrix(nrow = length(eQTL.gwas.combined.rsid), ncol= length(eQTL.gwas.combined.rsid))
+eQTL.gwas.combined.LD.r2 <-matrix(nrow = length(eQTL.gwas.combined.rsid), ncol = length(eQTL.gwas.combined.rsid))
+eQTL.gwas.combined.LD.dprime <-matrix(nrow = length(eQTL.gwas.combined.rsid), ncol = length(eQTL.gwas.combined.rsid))
 colnames(eQTL.gwas.combined.LD.r2) <- colnames(eQTL.gwas.combined.LD.dprime) <- eQTL.gwas.combined.rsid
 rownames(eQTL.gwas.combined.LD.r2) <- rownames(eQTL.gwas.combined.LD.dprime) <- eQTL.gwas.combined.rsid
 for(i in 1:(length(eQTL.gwas.combined.rsid) - 1)){
@@ -368,60 +383,141 @@ ggplot2::ggplot(eQTL.combined, ggplot2::aes(x = as.integer(position), y = -log10
 #                                        $geneName[which(gwas_variants$genomicContexts[[n]]
 #                                                        $isClosestGene == TRUE)]))))
 # })
+#
+# zoom.ld <- LD.500Kb[which(LD.500Kb$position.from < zoom.maxbase & LD.500Kb$position.from > zoom.minbase &
+#                             LD.500Kb$position.to < zoom.maxbase & LD.500Kb$position.to > zoom.minbase ),]
 
-zoom.ld <- LD.500Kb[which(LD.500Kb$position.from < zoom.maxbase & LD.500Kb$position.from > zoom.minbase &
-                            LD.500Kb$position.to < zoom.maxbase & LD.500Kb$position.to > zoom.minbase ),]
 
-
+# full datafram where LD and eQTL overlap
 ld.eqtl.overlap <- LD.500Kb[which(LD.500Kb$from %in% eQTL.combined$SNPid & LD.500Kb$to %in% eQTL.combined$SNPid),]
 
+# zoomed LD - eQTL overlap dataframe
 zoom.ld.eqtl.overlap <- ld.eqtl.overlap[which(ld.eqtl.overlap$position.from < zoom.maxbase &
                                                 ld.eqtl.overlap$position.from > zoom.minbase &
                                                 ld.eqtl.overlap$position.to < zoom.maxbase &
                                                 ld.eqtl.overlap$position.to > zoom.minbase ),]
 
-zoom.ld.eqtl.overlap.r2 <- matrix(0, nrow = length(unique(
-  union(zoom.ld.eqtl.overlap$to, zoom.ld.eqtl.overlap$from))),
-  ncol = length(unique(union(zoom.ld.eqtl.overlap$to, zoom.ld.eqtl.overlap$from))),
-  dimnames = list(unique(union(zoom.ld.eqtl.overlap$to, zoom.ld.eqtl.overlap$from))[order(LD.info.500Kb.unique.variants$position[
-    match(unique(union(zoom.ld.eqtl.overlap$to, zoom.ld.eqtl.overlap$from)), LD.info.500Kb.unique.variants$rsid)])],
-    unique(union(zoom.ld.eqtl.overlap$to, zoom.ld.eqtl.overlap$from))[order(LD.info.500Kb.unique.variants$position[
-      match(unique(union(zoom.ld.eqtl.overlap$to, zoom.ld.eqtl.overlap$from)), LD.info.500Kb.unique.variants$rsid)])]))
+# number of LD - eQTL overlaps in zoom
+zoom.ld.eqtl.overlap.row.num <- length(unique(union(zoom.ld.eqtl.overlap$to, zoom.ld.eqtl.overlap$from)))
+# rsids of overlap in zoom
+zoom.ld.eqtl.overlap.rsids <- unique(union(zoom.ld.eqtl.overlap$to, zoom.ld.eqtl.overlap$from))
 
+# returns row numbers where the RSIDs in the LD - eQTL overlap are rows on the ref.table
+get_overlap_row_nums <- function(ref.table){
+  match(zoom.ld.eqtl.overlap.rsids, ref.table)
+}
+
+# sorted rsids of overlap
+zoom.ld.eqtl.overlap.rsids <- zoom.ld.eqtl.overlap.rsids[order(LD.info.500Kb.unique.variants$position[
+  get_overlap_row_nums(LD.info.500Kb.unique.variants$rsid)])]
+
+# BP postions in LD - eQTL overlap sorted smallest to largest
+zoom.ld.eqtl.overlap.positions <- sort(unique(union(zoom.ld.eqtl.overlap$position.to, zoom.ld.eqtl.overlap$position.from)))
+zoom.ld.eqtl.overlap.total.dist <- max(zoom.ld.eqtl.overlap.positions) - min(zoom.ld.eqtl.overlap.positions)
+
+# matrix for distances
+zoom.ld.eqtl.overlap.dist <- outer(zoom.ld.eqtl.overlap.positions, zoom.ld.eqtl.overlap.positions, '-')
+zoom.ld.eqtl.overlap.dist[upper.tri(zoom.ld.eqtl.overlap.r2)] = 0
+zoom.ld.eqtl.overlap.dist.scaled <- rescale(zoom.ld.eqtl.overlap.dist, to = c(0,1))
+
+# initialize matrix for r2 values
+zoom.ld.eqtl.overlap.r2 <- matrix(0, nrow = zoom.ld.eqtl.overlap.row.num, ncol = zoom.ld.eqtl.overlap.row.num,
+  dimnames = list(zoom.ld.eqtl.overlap.rsids, zoom.ld.eqtl.overlap.rsids))
+
+# populate the r2 matrix
 for(i in 1:dim(zoom.ld.eqtl.overlap)[1]){
   zoom.ld.eqtl.overlap.r2[zoom.ld.eqtl.overlap$from[i], zoom.ld.eqtl.overlap$to[i]]<-
     zoom.ld.eqtl.overlap.r2[zoom.ld.eqtl.overlap$to[i],zoom.ld.eqtl.overlap$from[i]] <-
                                 zoom.ld.eqtl.overlap$r2[i]
 }
 
-annot <- HeatmapAnnotation("-log10(Pvalue)" = anno_points(eqtl.combined.tub$Mlog[
-  match(rownames(zoom.ld.eqtl.overlap.r2),eqtl.combined.tub$SNPid)],axis = TRUE, axis_side = "right",
-  which = "column",annotation_height = unit(c(5), "cm"), ylim = c(0, 5)), show_annotation_name = TRUE,
-  annotation_name_rot = 0, annotation_name_offset = unit(8, "mm"))
-
+# making lower portion of LD plot white
 zoom.ld.eqtl.overlap.r2[lower.tri(zoom.ld.eqtl.overlap.r2)] = 0
-col_fun = colorRamp2(c( 0, 1), c("white", "darkred"), transparency = 0.5)
-Heatmap(zoom.ld.eqtl.overlap.r2, name = "LD R2", col = col_fun, cluster_rows = FALSE, cluster_columns = FALSE,
+
+# For the top of the heatmap. This dataframe has the Tub and Glom eQTL data
+annot.df <- as.data.frame(cbind(eqtl.combined.tub$Mlog[get_r2_overlap_row_nums(eqtl.combined.tub$SNPid)],
+  eqtl.combined.glom$Mlog[get_r2_overlap_row_nums(eqtl.combined.glom$SNPid)]))
+names(annot.df) <- c("Tub", "Glom")
+annot <- HeatmapAnnotation(df = annot.df,
+                           col = list(Tub = colorRamp2(c(0, 6), c("white", "darkgreen")),
+                                      Glom = colorRamp2(c(0, 6), c("white", "darkblue"))),
+                           show_annotation_name = TRUE)
+
+# Get matrix with the combined values for the plot
+zoom.ld.eqtl.overlap.combined.r2.dist <- zoom.ld.eqtl.overlap.r2
+zoom.ld.eqtl.overlap.combined.r2.dist[lower.tri(zoom.ld.eqtl.overlap.combined.r2.dist)] <-
+  zoom.ld.eqtl.overlap.dist.scaled[lower.tri(zoom.ld.eqtl.overlap.dist.scaled)]
+
+# color scale for r2 and distances
+col_r2 = colorRamp2(c(0, 1), c("white", "darkred"), transparency = 0.5)
+col_dist = colorRamp2(c(0,1), c("white","black"), transparency = 0.5)
+
+# Make the heatmap!
+Heatmap(zoom.ld.eqtl.overlap.combined.r2.dist, col = colorRamp2(c(-1, 1), c("white", "white"), transparency = 0.5),
+        name = "LD R2", cluster_rows = FALSE, cluster_columns = FALSE,
         show_row_names = TRUE, show_column_names = TRUE, show_column_dend = TRUE, top_annotation = annot,
-        top_annotation_height = unit(2, "cm"))
+        top_annotation_height = unit(2, "cm"), cell_fun = function(j, i, x, y, width, height, fill) {
+          grid.rect(x = x, y = y, width = width, height = height, gp = gpar(col = "white", fill = NA))
+              if(i < j) {
+                grid.rect(x = x, y = y, width = width, height = height,
+                          gp = gpar(col = "lightgrey",
+                                    fill = col_r2(zoom.ld.eqtl.overlap.combined.r2.dist[i,j])))
+              } else if(i > j) {
+                grid.rect(x = x, y = y, width = width, height = height,
+                          gp = gpar(col = col_dist(zoom.ld.eqtl.overlap.combined.r2.dist[i,j]),
+                                    fill = col_dist(zoom.ld.eqtl.overlap.combined.r2.dist[i,j])))
+              }
+          }
+        )
 
 
-chordDiagram(zoom.ld.eqtl.overlap.r2, col= col_fun(zoom.ld.eqtl.overlap.r2),
-             annotationTrack = c( "grid"),annotationTrackHeight = c(0.03, 0.01),
-             grid.col = NA, grid.border = "black",
-             preAllocateTracks = list(track.height = max(strwidth(unlist(dimnames(zoom.ld.eqtl.overlap.r2))))))
-circos.track(track.index = 1, panel.fun = function(x, y) {
-  circos.text(CELL_META$xcenter, CELL_META$ylim[1], CELL_META$sector.index,
-              facing = "clockwise", niceFacing = TRUE, adj = c(0, 0.5))}, bg.border = NA)
+# Heatmap(zoom.ld.eqtl.overlap.r2, name = "LD R2", col = col_r2, cluster_rows = FALSE, cluster_columns = FALSE,
+#         show_row_names = TRUE, show_column_names = TRUE, show_column_dend = TRUE, top_annotation = annot,
+#         top_annotation_height = unit(2, "cm"))
 
-# eqtl.combined.tub <- eQTL.combined[which(eQTL.combined$compartment == "Tub"),]
-# eqtl.combined.tub$pvalue <- as.numeric(as.character(eqtl.combined.tub$pvalue))
-# eqtl.combined.tub$Mlog <- -log10(eqtl.combined.tub$pvalue)
-# eqtl.combined.tub.length <- dim(eqtl.combined.tub)[1]
-# eqtl.combined.glom <- eQTL.combined[which(eQTL.combined$compartment == "Glom"),]
-# eqtl.combined.glom$pvalue <- as.numeric(as.character(eqtl.combined.glom$pvalue))
-# eqtl.combined.glom$Mlog <- -log10(eqtl.combined.glom$pvalue)
-# eqtl.combined.glom.length <- dim(eqtl.combined.glom)[1]
+# annot.eQTL.tub <- anno_points(eqtl.combined.tub$Mlog[
+#   match(rownames(zoom.ld.eqtl.overlap.r2),eqtl.combined.tub$SNPid)],axis = TRUE, axis_side = "right",
+#   which = "column",annotation_height = unit(c(10), "cm"), ylim = c(0, ceiling(max(eqtl.combined.tub$Mlog))))
+#
+# annot.eQTL.glom <- anno_points(eqtl.combined.glom$Mlog[
+#   match(rownames(zoom.ld.eqtl.overlap.r2),eqtl.combined.glom$SNPid)],axis = TRUE, axis_side = "right",
+#   which = "column",annotation_height = unit(c(10), "cm"), ylim = c(0, ceiling(max(eqtl.combined.glom$Mlog))))
+#
+#
+# # creates the eQTL plot above the heatmap
+# annot.eQTL <- anno_points(eQTL.combined$Mlog[
+#   match(rownames(zoom.ld.eqtl.overlap.r2),eqtl.combined.tub$SNPid)],axis = TRUE, axis_side = "right",
+#   which = "column",annotation_height = unit(c(5), "cm"), ylim = c(0, ceiling(max(eqtl.combined.tub$Mlog))))
+#
+# # combining annotations
+# annot <- HeatmapAnnotation("-log10(Pvalue)" = annot.eQTL.tub, " " = annot.eQTL.glom, show_annotation_name = TRUE,
+#   annotation_name_rot = 270, annotation_name_offset = unit(8, "mm"))
+
+
+
+# chordDiagram(zoom.ld.eqtl.overlap.r2, col= col_fun(zoom.ld.eqtl.overlap.r2),
+#              annotationTrack = c( "grid"),annotationTrackHeight = c(0.03, 0.01),
+#              grid.col = NA, grid.border = "black",
+#              preAllocateTracks = list(track.height = max(strwidth(unlist(dimnames(zoom.ld.eqtl.overlap.r2))))))
+# circos.track(track.index = 1, panel.fun = function(x, y) {
+#   circos.text(CELL_META$xcenter, CELL_META$ylim[1], CELL_META$sector.index,
+#               facing = "clockwise", niceFacing = TRUE, adj = c(0, 0.5))}, bg.border = NA)
+
+eqtl.combined.tub <- eQTL.combined[which(eQTL.combined$compartment == "Tub"),]
+eqtl.combined.tub$pvalue <- as.numeric(as.character(eqtl.combined.tub$pvalue))
+eqtl.combined.tub$Mlog <- -log10(eqtl.combined.tub$pvalue)
+eqtl.combined.tub.length <- dim(eqtl.combined.tub)[1]
+eqtl.combined.glom <- eQTL.combined[which(eQTL.combined$compartment == "Glom"),]
+eqtl.combined.glom$pvalue <- as.numeric(as.character(eqtl.combined.glom$pvalue))
+eqtl.combined.glom$Mlog <- -log10(eqtl.combined.glom$pvalue)
+eqtl.combined.glom.length <- dim(eqtl.combined.glom)[1]
+
+
+# make Mlog for eQTL.combined
+
+eQTL.combined$pvalue <- as.numeric(as.character(eQTL.combined$pvalue))
+eQTL.combined$Mlog <- -log10(eQTL.combined$pvalue)
+
 # bed.eqtl.tub <- data.frame(chr = character(eqtl.combined.tub.length),
 #                             start = as.integer(eqtl.combined.tub$position),
 #                             end = as.integer(eqtl.combined.tub$position),
@@ -444,9 +540,7 @@ circos.initializeWithIdeogram(chromosome.index = "chr1")
 circos.genomicInitialize(basetrack)
 circos.genomicTrackPlotRegion(bed.list.eqtl)
 
-zoom.ld.eqtl.overlap.positions <- LD.info.500Kb.unique.variants$position[
-  match(unique(union(zoom.ld.eqtl.overlap$to, zoom.ld.eqtl.overlap$from)),
-        LD.info.500Kb.unique.variants$rsid)]
+
 edgelist <- cbind(zoom.ld.eqtl.overlap$from, zoom.ld.eqtl.overlap$to)
 arcplot(edgelist, vertices = unique(union(zoom.ld.eqtl.overlap$to, zoom.ld.eqtl.overlap$from)),
         ordering = unique(union(zoom.ld.eqtl.overlap$to, zoom.ld.eqtl.overlap$from))[
