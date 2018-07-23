@@ -13,13 +13,16 @@ library(rentrez)
 library(gwascat)
 library(magrittr)
 library(GenomeGraphs)
+library(biomaRt)
 library(ensembldb)
 library(ggplot2)
 library(httr)
 library(ComplexHeatmap)
 library(circlize)
 library(stringi)
+library(data.table)
 library(arcdiagram)
+library(scales)
 
 ####################
 # User Input
@@ -193,15 +196,12 @@ end.500Kb <- gene.of.interest.half + 250000
 LD.info.500Kb <- read_json(paste("http://grch37.rest.ensembl.org/ld/human/region/",gene.of.interest.chrom,":",
                                  start.500Kb,"..",end.500Kb -1,"/1000GENOMES:phase_3:",genomes.population,
                                  "?content-type=application/json",sep = ""))
-LD.info.500Kb.length <- length(LD.info.500Kb)
-LD.info.500Kb.all.variants <- vector(length = 1e06)
-for(n in 1:LD.info.500Kb.length){
-  LD.info.500Kb.all.variants[n] <- (LD.info.500Kb[[n]]$variation1)
-  LD.info.500Kb.all.variants[LD.info.500Kb.length + n] <- (LD.info.500Kb[[n]]$variation2)
-}
+# make nested list into data frame
+LD.info.500Kb <- rbindlist(LD.info.500Kb, fill = FALSE)
 
-LD.info.500Kb.unique.variants <- data.frame(rsid = unique(LD.info.500Kb.all.variants))
-LD.info.500Kb.unique.variants$position <- numeric(dim(LD.info.500Kb.unique.variants)[1])
+LD.info.500Kb.unique.variants <- data.frame(rsid = union(LD.info.500Kb$variation1, LD.info.500Kb$variation2),
+                                            position = numeric(length(union(LD.info.500Kb$variation1, LD.info.500Kb$variation2))))
+
 
 # Fetch Position from Ensembl using RSID
 server <- "http://grch37.rest.ensembl.org"
@@ -268,9 +268,9 @@ j <- j[which(j$r2 > 0),]
 j<- j[order(j$r2, decreasing = TRUE),]
 
 
-##############
-# Gene Plot
-##############
+#####################
+# Gene Plot all eQTL
+#####################
 
 minbase <- min( as.numeric(eQTL.combined$position))
 maxbase <- max( as.numeric(eQTL.combined$position))
@@ -301,8 +301,135 @@ for(i in 1:dim(gwas.variants)[1]){
   overlays[i]<- makeTextOverlay("o", xpos = as.numeric(gwas.variants$position[i]), ypos = .13,
                                      coords = "genomic", dp = DisplayPars(color = "darkgreen", cex = 1.5))
 }
-gdPlot(list(legend,"-log(P value)" = expres.tub, BP = genomeAxis), overlays = overlays,
+gdPlot(list(legend,"-log(P value)  of  eQTL" = expres.tub, BP = genomeAxis), overlays = overlays,
        minBase = minbase, maxBase =maxbase, labelCex = 2)
+
+
+#######################################
+# LD Heatmap and eQTL around each GWAS
+#######################################
+
+# full datafram where LD and eQTL overlap
+ld.eqtl.overlap <- LD.500Kb[which(LD.500Kb$from %in% eQTL.combined$SNPid & LD.500Kb$to %in% eQTL.combined$SNPid),]
+
+ld.eqtl.gwas.overlap.position <- LD.info.500Kb.unique.variants[match(eQTL.gwas.combined.rsid,
+                                                                     LD.info.500Kb.unique.variants$rsid),]
+
+range.around.gwas <- 25000
+
+# zoomed LD - eQTL overlap dataframe
+zoom.ld.eqtl.gwas.overlap <- ld.eqtl.overlap[which(ld.eqtl.overlap$position.from <
+                                                     ld.eqtl.gwas.overlap.position$position[1] + range.around.gwas &
+                                                ld.eqtl.overlap$position.from >
+                                                  ld.eqtl.gwas.overlap.position$position[1] - range.around.gwas &
+                                                ld.eqtl.overlap$position.to <
+                                                  ld.eqtl.gwas.overlap.position$position[1] + range.around.gwas &
+                                                ld.eqtl.overlap$position.to >
+                                                  ld.eqtl.gwas.overlap.position$position[1] - range.around.gwas),]
+
+zoom.ld.eqtl.gwas.overlap <- zoom.ld.eqtl.gwas.overlap[(zoom.ld.eqtl.gwas.overlap$dprime > 0.85 |
+                                                          zoom.ld.eqtl.gwas.overlap$position.from %in%
+                                                          ld.eqtl.gwas.overlap.position$rsid |
+                                                          zoom.ld.eqtl.gwas.overlap$position.to %in%
+                                                          ld.eqtl.gwas.overlap.position$rsid),]
+
+# number of LD - eQTL overlaps in zoom
+zoom.ld.eqtl.gwas.overlap.row.num <- length(unique(union(zoom.ld.eqtl.gwas.overlap$to, zoom.ld.eqtl.gwas.overlap$from)))
+# rsids of overlap in zoom
+zoom.ld.eqtl.gwas.overlap.rsids <- unique(union(zoom.ld.eqtl.gwas.overlap$to, zoom.ld.eqtl.gwas.overlap$from))
+
+# returns row numbers where the RSIDs in the LD - eQTL overlap are rows on the ref.table
+get_overlap_row_nums <- function(ref.table){
+  match(zoom.ld.eqtl.gwas.overlap.rsids, ref.table)
+}
+
+# sorted rsids of overlap
+zoom.ld.eqtl.gwas.overlap.rsids <- zoom.ld.eqtl.gwas.overlap.rsids[order(LD.info.500Kb.unique.variants$position[
+  get_overlap_row_nums(LD.info.500Kb.unique.variants$rsid)])]
+
+# BP postions in LD - eQTL overlap sorted smallest to largest
+zoom.ld.eqtl.gwas.overlap.positions <- sort(unique(union(zoom.ld.eqtl.gwas.overlap$position.to, zoom.ld.eqtl.gwas.overlap$position.from)))
+zoom.ld.eqtl.gwas.overlap.total.dist <- max(zoom.ld.eqtl.gwas.overlap.positions) - min(zoom.ld.eqtl.gwas.overlap.positions)
+
+# matrix for distances
+zoom.ld.eqtl.gwas.overlap.dist <- outer(zoom.ld.eqtl.gwas.overlap.positions, zoom.ld.eqtl.gwas.overlap.positions, '-')
+zoom.ld.eqtl.gwas.overlap.dist[upper.tri(zoom.ld.eqtl.gwas.overlap.r2)] = 0
+zoom.ld.eqtl.gwas.overlap.dist.scaled <- rescale(zoom.ld.eqtl.gwas.overlap.dist, to = c(0,1))
+
+# initialize matrix for r2 values
+zoom.ld.eqtl.gwas.overlap.r2 <- matrix(0, nrow = zoom.ld.eqtl.gwas.overlap.row.num, ncol = zoom.ld.eqtl.gwas.overlap.row.num,
+                                  dimnames = list(zoom.ld.eqtl.gwas.overlap.rsids, zoom.ld.eqtl.gwas.overlap.rsids))
+
+# populate the r2 matrix
+for(i in 1:dim(zoom.ld.eqtl.gwas.overlap)[1]){
+  zoom.ld.eqtl.gwas.overlap.r2[zoom.ld.eqtl.gwas.overlap$from[i], zoom.ld.eqtl.gwas.overlap$to[i]]<-
+    zoom.ld.eqtl.gwas.overlap.r2[zoom.ld.eqtl.gwas.overlap$to[i],zoom.ld.eqtl.gwas.overlap$from[i]] <-
+    zoom.ld.eqtl.gwas.overlap$r2[i]
+}
+
+# making lower portion of LD plot white
+zoom.ld.eqtl.gwas.overlap.r2[lower.tri(zoom.ld.eqtl.gwas.overlap.r2)] = 0
+
+annot.gwas <- match(rownames(zoom.ld.eqtl.gwas.overlap.r2), ld.eqtl.gwas.overlap.position$rsid)
+annot.gwas[!is.na(annot.gwas)] <- "TRUE"
+annot.gwas[is.na(annot.gwas)] <- "FALSE"
+
+# For the top of the heatmap. This dataframe has the Tub and Glom eQTL data
+annot.df <- as.data.frame(cbind(annot.gwas,
+                                eqtl.combined.tub$Mlog[match(rownames(zoom.ld.eqtl.gwas.overlap.r2),eqtl.combined.tub$SNPid)],
+                                eqtl.combined.glom$Mlog[match(rownames(zoom.ld.eqtl.gwas.overlap.r2),eqtl.combined.glom$SNPid)]),
+                          stringsAsFactors = FALSE)
+names(annot.df) <- c("GWAS","Tub", "Glom")
+annot.df$Tub <- as.numeric(annot.df$Tub)
+annot.df$Glom <- as.numeric(annot.df$Glom)
+annot <- HeatmapAnnotation(df = annot.df,
+                           col = list(GWAS = c("TRUE" = "orange", "FALSE" = "white"),
+                                      Tub = colorRamp2(c(0, 6), c("white", "darkgreen")),
+                                      Glom = colorRamp2(c(0, 6), c("white", "blue"))),
+                           show_annotation_name = TRUE)
+
+
+# Get matrix with the combined values for the plot
+zoom.ld.eqtl.gwas.overlap.combined.r2.dist <- zoom.ld.eqtl.gwas.overlap.r2
+zoom.ld.eqtl.gwas.overlap.combined.r2.dist[lower.tri(zoom.ld.eqtl.gwas.overlap.combined.r2.dist)] <-
+  zoom.ld.eqtl.gwas.overlap.dist.scaled[lower.tri(zoom.ld.eqtl.gwas.overlap.dist.scaled)]
+
+# color scale for r2 and distances
+col_r2 = colorRamp2(c(0, 1), c("white", "darkred"))
+col_dist = colorRamp2(c(0,1), c("white","black"), transparency = 0.5)
+
+# legend information
+legend_r2 = Legend(at = seq(0,1, by=0.2), title = "LD R2", col_fun = colorRamp2(c(0, 1), c("white", "red")))
+legend_dist = Legend(at = seq(0, 1, by = .2),title = "Normalized\nDistance",
+                     col_fun = colorRamp2(c(0, 1), c("white", "black")))
+
+# Make the heatmap!
+zoom.ld.eqtl.gwas.overlap.Heatmap <- Heatmap(zoom.ld.eqtl.gwas.overlap.combined.r2.dist,
+                                             col = colorRamp2(c(-1, 1), c("white", "white"), transparency = 0.5),
+                                             name = "LD R2", cluster_rows = FALSE, cluster_columns = FALSE,
+                                             show_heatmap_legend = FALSE, show_row_names = TRUE, show_column_names = TRUE,
+                                             show_column_dend = TRUE, top_annotation = annot,
+                                             top_annotation_height = unit(2, "cm"),
+                                             cell_fun = function(j, i, x, y, width, height, fill) {
+                                               grid.rect(x = x, y = y, width = width, height = height,
+                                                         gp = gpar(col = "white", fill = NA))
+                                               if(i < j) {
+                                                 grid.rect(x = x, y = y, width = width, height = height,
+                                                           gp = gpar(col = "lightgrey",
+                                                                     fill = col_r2(zoom.ld.eqtl.gwas.overlap.combined.r2.dist[i,j])))
+                                               } else if(i > j) {
+                                                 grid.rect(x = x, y = y, width = width, height = height,
+                                                           gp = gpar(col = col_dist(zoom.ld.eqtl.gwas.overlap.combined.r2.dist[i,j]),
+                                                                     fill = col_dist(zoom.ld.eqtl.gwas.overlap.combined.r2.dist[i,j])))
+                                               }
+                                             }
+                                             )
+
+draw(zoom.ld.eqtl.gwas.overlap.Heatmap, annotation_legend_list = list(legend_r2, legend_dist))
+
+#########################
+
+
 
 # Graph "zoomed in" to 100,000 range around gene
 zoom.minbase <- gene.of.interest.start - 15000
@@ -452,9 +579,14 @@ zoom.ld.eqtl.overlap.combined.r2.dist[lower.tri(zoom.ld.eqtl.overlap.combined.r2
 col_r2 = colorRamp2(c(0, 1), c("white", "darkred"), transparency = 0.5)
 col_dist = colorRamp2(c(0,1), c("white","black"), transparency = 0.5)
 
+# legend information
+legend_r2 = Legend(at = seq(0,1, by=0.2), title = "LD R2", col_fun = colorRamp2(c(0, 1), c("white", "red")))
+legend_dist = Legend(at = seq(0, zoom.ld.eqtl.overlap.total.dist, by = 10000),title = "Distance",
+                                col_fun = colorRamp2(c(0, zoom.ld.eqtl.overlap.total.dist), c("white", "black")))
+
 # Make the heatmap!
-Heatmap(zoom.ld.eqtl.overlap.combined.r2.dist, col = colorRamp2(c(-1, 1), c("white", "white"), transparency = 0.5),
-        name = "LD R2", cluster_rows = FALSE, cluster_columns = FALSE,
+i<-Heatmap(zoom.ld.eqtl.overlap.combined.r2.dist, col = colorRamp2(c(-1, 1), c("white", "white"), transparency = 0.5),
+        name = "LD R2", cluster_rows = FALSE, cluster_columns = FALSE, show_heatmap_legend = FALSE,
         show_row_names = TRUE, show_column_names = TRUE, show_column_dend = TRUE, top_annotation = annot,
         top_annotation_height = unit(2, "cm"), cell_fun = function(j, i, x, y, width, height, fill) {
           grid.rect(x = x, y = y, width = width, height = height, gp = gpar(col = "white", fill = NA))
@@ -470,6 +602,7 @@ Heatmap(zoom.ld.eqtl.overlap.combined.r2.dist, col = colorRamp2(c(-1, 1), c("whi
           }
         )
 
+draw(i,annotation_lege(legend_dist))
 
 # Heatmap(zoom.ld.eqtl.overlap.r2, name = "LD R2", col = col_r2, cluster_rows = FALSE, cluster_columns = FALSE,
 #         show_row_names = TRUE, show_column_names = TRUE, show_column_dend = TRUE, top_annotation = annot,
@@ -545,4 +678,7 @@ edgelist <- cbind(zoom.ld.eqtl.overlap$from, zoom.ld.eqtl.overlap$to)
 arcplot(edgelist, vertices = unique(union(zoom.ld.eqtl.overlap$to, zoom.ld.eqtl.overlap$from)),
         ordering = unique(union(zoom.ld.eqtl.overlap$to, zoom.ld.eqtl.overlap$from))[
           order(zoom.ld.eqtl.overlap.positions)])
+
+
+
 
