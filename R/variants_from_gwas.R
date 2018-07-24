@@ -18,6 +18,7 @@ library(ensembldb)
 library(ggplot2)
 library(httr)
 library(ComplexHeatmap)
+library(GetoptLong)
 library(circlize)
 library(stringi)
 library(data.table)
@@ -282,24 +283,26 @@ genesmin <- makeGeneRegion(start = minbase, end = maxbase,
 expres.glom <- makeSegmentation(value = as.numeric(-log10(as.numeric(eQTL.combined$pvalue[
   which(eQTL.combined$compartment == "Glom")]))), start = as.numeric(
     eQTL.combined$position[which(eQTL.combined$compartment == "Glom")]),end = as.numeric(
-    eQTL.combined$position[which(eQTL.combined$compartment == "Glom")]),dp = DisplayPars(color="darkblue", lwd = 3, lty=1))
+    eQTL.combined$position[which(eQTL.combined$compartment == "Glom")]),dp = DisplayPars(color="#f2b229", lwd = 7, lty=1))
 expres.tub <- makeGenericArray(intensity = as.matrix(-log10(as.numeric(eQTL.combined$pvalue[
   which(eQTL.combined$compartment == "Tub")]))), probeStart = as.numeric(
-  eQTL.combined$position[which(eQTL.combined$compartment == "Tub")]), dp = DisplayPars(type = "dot", lwd = 3, pch = 5),
+  eQTL.combined$position[which(eQTL.combined$compartment == "Tub")]), dp = DisplayPars(type = "point", pch = 19,
+                                                                                       color = "#a162c4"),
   trackOverlay = expres.glom)
+setPar(expres.tub, "pointSize", .7)
 genomeAxis <- makeGenomeAxis(add53 = TRUE, add35=TRUE)
 gene.region.overlay <- makeRectangleOverlay(start = gene.of.interest.start, end = gene.of.interest.end,
                                             dp = DisplayPars(fill = "yellow", alpha = 0.2, lty = "dashed"))
 legend = makeLegend(text = c('Tub','Glom', "GWAS", gene.of.interest),
-                    fill = c('darkred','darkblue', "darkgreen", "lightyellow"), cex = 1)
+                    fill = c('#a162c4','#f2b229', "#2872f1", "lightyellow"), cex = 1)
 
 overlays <- vector(mode="list",length = dim(gwas.variants)[1] + 1)
 overlays[dim(gwas.variants)[1] + 1]<- makeRectangleOverlay(
   start = gene.of.interest.start,end = gene.of.interest.end,
   dp = DisplayPars(fill = "yellow", alpha = 0.2, lty = "dotted"), region = c(2,3))
 for(i in 1:dim(gwas.variants)[1]){
-  overlays[i]<- makeTextOverlay("o", xpos = as.numeric(gwas.variants$position[i]), ypos = .13,
-                                     coords = "genomic", dp = DisplayPars(color = "darkgreen", cex = 1.5))
+  overlays[i]<- makeTextOverlay("o", xpos = as.numeric(gwas.variants$position[i]), ypos = .075,
+                                     coords = "genomic", dp = DisplayPars(color = "#2872f1", cex = 2.5))
 }
 gdPlot(list(legend,"-log(P value)  of  eQTL" = expres.tub, BP = genomeAxis), overlays = overlays,
        minBase = minbase, maxBase =maxbase, labelCex = 2)
@@ -370,23 +373,17 @@ for(i in 1:dim(zoom.ld.eqtl.gwas.overlap)[1]){
 # making lower portion of LD plot white
 zoom.ld.eqtl.gwas.overlap.r2[lower.tri(zoom.ld.eqtl.gwas.overlap.r2)] = 0
 
-annot.gwas <- match(rownames(zoom.ld.eqtl.gwas.overlap.r2), ld.eqtl.gwas.overlap.position$rsid)
-annot.gwas[!is.na(annot.gwas)] <- "TRUE"
-annot.gwas[is.na(annot.gwas)] <- "FALSE"
-
 # For the top of the heatmap. This dataframe has the Tub and Glom eQTL data
-annot.df <- as.data.frame(cbind(annot.gwas,
-                                eqtl.combined.tub$Mlog[match(rownames(zoom.ld.eqtl.gwas.overlap.r2),eqtl.combined.tub$SNPid)],
+annot.df <- as.data.frame(cbind(eqtl.combined.tub$Mlog[match(rownames(zoom.ld.eqtl.gwas.overlap.r2),eqtl.combined.tub$SNPid)],
                                 eqtl.combined.glom$Mlog[match(rownames(zoom.ld.eqtl.gwas.overlap.r2),eqtl.combined.glom$SNPid)]),
                           stringsAsFactors = FALSE)
-names(annot.df) <- c("GWAS","Tub", "Glom")
-annot.df$Tub <- as.numeric(annot.df$Tub)
-annot.df$Glom <- as.numeric(annot.df$Glom)
+names(annot.df) <- c("Tubulointerstitium", "Glomerulus")
+annot.df$Tubulointerstitium <- as.numeric(annot.df$Tubulointerstitium)
+annot.df$Glomerulus <- as.numeric(annot.df$Glomerulus)
 annot <- HeatmapAnnotation(df = annot.df,
-                           col = list(GWAS = c("TRUE" = "orange", "FALSE" = "white"),
-                                      Tub = colorRamp2(c(0, 6), c("white", "darkgreen")),
-                                      Glom = colorRamp2(c(0, 6), c("white", "blue"))),
-                           show_annotation_name = TRUE)
+                           col = list(Tubulointerstitium = colorRamp2(c(0, 6), c("white", "darkblue")),
+                                      Glomerulus = colorRamp2(c(0, 6), c("white", "orange"))),
+                           show_annotation_name = TRUE, show_legend = FALSE)
 
 
 # Get matrix with the combined values for the plot
@@ -396,18 +393,31 @@ zoom.ld.eqtl.gwas.overlap.combined.r2.dist[lower.tri(zoom.ld.eqtl.gwas.overlap.c
 
 # color scale for r2 and distances
 col_r2 = colorRamp2(c(0, 1), c("white", "darkred"))
-col_dist = colorRamp2(c(0,1), c("white","black"), transparency = 0.5)
+col_dist = colorRamp2(c(0,1), c("white","black"))
+
+col_label_names <- match(rownames(zoom.ld.eqtl.gwas.overlap.combined.r2.dist),
+                      as.character(ld.eqtl.gwas.overlap.position$rsid))
+col_label_names[!is.na(col_label_names)] <- "#2872f1"
+col_label_names[is.na(col_label_names)] <- "#404040"
 
 # legend information
-legend_r2 = Legend(at = seq(0,1, by=0.2), title = "LD R2", col_fun = colorRamp2(c(0, 1), c("white", "red")))
-legend_dist = Legend(at = seq(0, 1, by = .2),title = "Normalized\nDistance",
+legend_Tubulointerstitium = Legend(at = seq(0, max(annot.df), by = 1),title = "Tubulointerstitium\n-log(pvalue)",
+                                   col_fun = colorRamp2(c(0, 6), c("white", "darkblue")))
+legend_Glomerulus = Legend(at = seq(0, max(annot.df), by = 1), col_fun = colorRamp2(c(0, 6), c("white", "orange")),
+                           title = "\nGlomerulus\n-log(pvalue)")
+legend_r2 = Legend(at = seq(0,1, by=0.2), title = "\nLinkage\nDisequilibrium\nR2",
+                   col_fun = colorRamp2(c(0, 1), c("white", "darkred")))
+legend_dist = Legend(at = seq(0, 1, by = .2),title = "\nNormalized\nDistance",
                      col_fun = colorRamp2(c(0, 1), c("white", "black")))
+legend_gwas = Legend(at = c("GWAS"), title = "GWAS HIT", type = "points", legend_gp = gpar(col = "#2872f1"))
 
 # Make the heatmap!
 zoom.ld.eqtl.gwas.overlap.Heatmap <- Heatmap(zoom.ld.eqtl.gwas.overlap.combined.r2.dist,
                                              col = colorRamp2(c(-1, 1), c("white", "white"), transparency = 0.5),
                                              name = "LD R2", cluster_rows = FALSE, cluster_columns = FALSE,
-                                             show_heatmap_legend = FALSE, show_row_names = TRUE, show_column_names = TRUE,
+                                             show_heatmap_legend = FALSE, show_row_names = TRUE,
+                                             row_names_gp = gpar(col = col_label_names),
+                                             show_column_names = TRUE, column_names_gp = gpar(col = col_label_names),
                                              show_column_dend = TRUE, top_annotation = annot,
                                              top_annotation_height = unit(2, "cm"),
                                              cell_fun = function(j, i, x, y, width, height, fill) {
@@ -425,7 +435,8 @@ zoom.ld.eqtl.gwas.overlap.Heatmap <- Heatmap(zoom.ld.eqtl.gwas.overlap.combined.
                                              }
                                              )
 
-draw(zoom.ld.eqtl.gwas.overlap.Heatmap, annotation_legend_list = list(legend_r2, legend_dist))
+draw(zoom.ld.eqtl.gwas.overlap.Heatmap, annotation_legend_list = list(legend_Tubulointerstitium, legend_Glomerulus,
+                                                                      legend_r2, legend_dist, legend_gwas))
 
 #########################
 
