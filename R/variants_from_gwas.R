@@ -235,11 +235,6 @@ while(i < dim(LD.info.500Kb.unique.variants)[1]){
 LD.info.500Kb.unique.variants <- LD.info.500Kb.unique.variants[which(LD.info.500Kb.unique.variants$position > 0),]
 LD.info.500Kb.unique.variants <- LD.info.500Kb.unique.variants[order(LD.info.500Kb.unique.variants$position),]
 
-ld.eqtl.overlap$position.variation1 <- LD.info.500Kb.unique.variants$position[
-  match(ld.eqtl.overlap$variation1, LD.info.500Kb.unique.variants$rsid)]
-ld.eqtl.overlap$position.variation2 <- LD.info.500Kb.unique.variants$position[
-  match(ld.eqtl.overlap$variation2, LD.info.500Kb.unique.variants$rsid)]
-
 #####################
 # Gene Plot all eQTL
 #####################
@@ -287,6 +282,19 @@ dev.off()
 # full datafram where LD and eQTL overlap
 ld.eqtl.overlap <- LD.info.500Kb[which(LD.info.500Kb$variation1 %in% eQTL.combined$SNPid &
                                          LD.info.500Kb$variation2 %in% eQTL.combined$SNPid),]
+ld.eqtl.overlap$position.variation1 <- LD.info.500Kb.unique.variants$position[
+  match(ld.eqtl.overlap$variation1, LD.info.500Kb.unique.variants$rsid)]
+ld.eqtl.overlap$position.variation2 <- LD.info.500Kb.unique.variants$position[
+  match(ld.eqtl.overlap$variation2, LD.info.500Kb.unique.variants$rsid)]
+
+ld.eqtl.overlap$eQTL.Tub.pvalue.variation2 <- eqtl.combined.tub$pvalue[
+  match(ld.eqtl.overlap$variation2, eqtl.combined.tub$SNPid)]
+ld.eqtl.overlap$eQTL.Tub.pvalue.variation1 <- eqtl.combined.tub$pvalue[
+  match(ld.eqtl.overlap$variation1, eqtl.combined.tub$SNPid)]
+ld.eqtl.overlap$eQTL.Glom.pvalue.variation2 <- eqtl.combined.glom$pvalue[
+  match(ld.eqtl.overlap$variation2, eqtl.combined.glom$SNPid)]
+ld.eqtl.overlap$eQTL.Glom.pvalue.variation1 <- eqtl.combined.glom$pvalue[
+  match(ld.eqtl.overlap$variation1, eqtl.combined.glom$SNPid)]
 
 
 
@@ -298,7 +306,6 @@ dprime.min <- 0.85
 
 
 for(n in 1:length(ld.eqtl.gwas.overlap.position$position)){
-  # zoomed LD - eQTL overlap dataframe
   zoom.ld.eqtl.gwas.overlap <- ld.eqtl.overlap[which(ld.eqtl.overlap$position.variation1 <
                                                        ld.eqtl.gwas.overlap.position$position[n] + range.around.gwas &
                                                   ld.eqtl.overlap$position.variation1 >
