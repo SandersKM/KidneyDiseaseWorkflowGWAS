@@ -254,6 +254,23 @@ ld.eqtl.overlap$eQTL.Glom.pvalue.variation1 <- eqtl.combined.glom$pvalue[match(l
 # Make output file
 ####################
 
+unique.positions <- unique(eQTL.combined$position)
+unique.position.rownum <- match(unique.positions,eQTL.combined$position)
+output.file <- data.frame(rsid = eQTL.combined$SNPid[unique.position.rownum],
+                          chrom = gene.of.interest.chrom, position = unique.positions,
+                          ref = eQTL.combined$ref[unique.position.rownum],
+                          alt = eQTL.combined$alt[unique.position.rownum],
+                          stringsAsFactors = FALSE)
+eqtl.combined.glom.row <- match(output.file$rsid,eqtl.combined.glom$SNPid)
+eqtl.combined.tub.row <- match(output.file$rsid,eqtl.combined.tub$SNPid)
+output.file$tub.pvalue <- eQTL.combined$pvalue[eqtl.combined.tub.row]
+output.file$tub.MLog <- eQTL.combined$Mlog[eqtl.combined.tub.row]
+output.file$tub.beta <- eQTL.combined$beta[eqtl.combined.tub.row]
+output.file$glom.pvalue <- eQTL.combined$pvalue[eqtl.combined.glom.row]
+output.file$glom.MLog <- eQTL.combined$Mlog[eqtl.combined.glom.row]
+output.file$glom.beta <- eQTL.combined$beta[eqtl.combined.glom.row]
+
+
 
 
 
