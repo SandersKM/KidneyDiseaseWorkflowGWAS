@@ -264,12 +264,12 @@ output.file <- data.frame(rsid = eQTL.combined$SNPid[unique.position.rownum],
                           stringsAsFactors = FALSE)
 eqtl.combined.glom.row <- match(output.file$rsid,eqtl.combined.glom$SNPid)
 eqtl.combined.tub.row <- match(output.file$rsid,eqtl.combined.tub$SNPid)
-output.file$tub.pvalue <- eQTL.combined$pvalue[eqtl.combined.tub.row]
-output.file$tub.MLog <- eQTL.combined$Mlog[eqtl.combined.tub.row]
-output.file$tub.beta <- eQTL.combined$beta[eqtl.combined.tub.row]
-output.file$glom.pvalue <- eQTL.combined$pvalue[eqtl.combined.glom.row]
-output.file$glom.MLog <- eQTL.combined$Mlog[eqtl.combined.glom.row]
-output.file$glom.beta <- eQTL.combined$beta[eqtl.combined.glom.row]
+output.file$tub.pvalue <- eqtl.combined.tub$pvalue[eqtl.combined.tub.row]
+output.file$tub.MLog <- eqtl.combined.tub$Mlog[eqtl.combined.tub.row]
+output.file$tub.beta <- eqtl.combined.tub$beta[eqtl.combined.tub.row]
+output.file$glom.pvalue <- eqtl.combined.glom$pvalue[eqtl.combined.glom.row]
+output.file$glom.MLog <- eqtl.combined.glom$Mlog[eqtl.combined.glom.row]
+output.file$glom.beta <- eqtl.combined.glom$beta[eqtl.combined.glom.row]
 
 # To get a row that has all LD informationrelated to that variant
 add_ld_information_to_output <- function(rsid){
@@ -289,7 +289,21 @@ add_ld_information_to_output <- function(rsid){
 }
 output.file$LD.info <- sapply(output.file$rsid, add_ld_information_to_output)
 
+if(sort.by.position){
+  output.file <- output.file[order(output.file$position),]
+}
 
+if(sort.by.GWAS){
+  output.file <- output.file[order()]
+}
+
+if(sort.by.pvalue){
+  output.file$temp <- sapply(1:dim(output.file)[1], function(n){
+    return(max(output.file$tub.MLog[n], output.file$glom.MLog[n]))
+  })
+  output.file <- output.file[order(output.file$temp, decreasing = TRUE),]
+  output.file <- output.file[, !colnames(output.file) == "temp"]
+}
 
 #####################
 # Gene Plot all eQTL
