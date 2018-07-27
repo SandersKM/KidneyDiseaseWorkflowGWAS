@@ -254,6 +254,7 @@ ld.eqtl.overlap$eQTL.Glom.pvalue.variation1 <- eqtl.combined.glom$pvalue[match(l
 # Make output file
 ####################
 
+# Starting with all unique positions in eQTL data
 unique.positions <- unique(eQTL.combined$position)
 unique.position.rownum <- match(unique.positions,eQTL.combined$position)
 output.file <- data.frame(rsid = eQTL.combined$SNPid[unique.position.rownum],
@@ -270,9 +271,23 @@ output.file$glom.pvalue <- eQTL.combined$pvalue[eqtl.combined.glom.row]
 output.file$glom.MLog <- eQTL.combined$Mlog[eqtl.combined.glom.row]
 output.file$glom.beta <- eQTL.combined$beta[eqtl.combined.glom.row]
 
-
-
-
+# To get a row that has all LD informationrelated to that variant
+add_ld_information_to_output <- function(rsid){
+  ld.string <- ""
+  var1.rownum <- which(rsid==LD.info.500Kb$variation1)
+  var2.rownum <- which(rsid==LD.info.500Kb$variation2)
+  if(length(union(var1.rownum, var2.rownum)) ==0){
+    return("")
+  }
+  ld.string <- paste0(LD.info.500Kb$variation2[which(rsid==LD.info.500Kb$variation1)], " : R2 = ",
+                      LD.info.500Kb$r2[ which(rsid==LD.info.500Kb$variation1)], " : D_prime = ",
+                      LD.info.500Kb$d_prime[ which(rsid==LD.info.500Kb$variation1)],"; ", collapse = "")
+  ld.string <- paste(ld.string, paste0(LD.info.500Kb$variation1[which(rsid==LD.info.500Kb$variation2)], " : R2 = ",
+                                        LD.info.500Kb$r2[ which(rsid==LD.info.500Kb$variation2)], " : D_prime = ",
+                                        LD.info.500Kb$d_prime[ which(rsid==LD.info.500Kb$variation2)],"; ", collapse = ""),sep = "")
+  return(ld.string)
+}
+output.file$LD.info <- sapply(output.file$rsid, add_ld_information_to_output)
 
 #####################
 # Gene Plot all eQTL
