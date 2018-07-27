@@ -289,6 +289,8 @@ add_ld_information_to_output <- function(rsid){
 }
 output.file$LD.info <- sapply(output.file$rsid, add_ld_information_to_output)
 
+
+
 #####################
 # Gene Plot all eQTL
 #####################
@@ -401,7 +403,7 @@ for (n in 1:length(ld.eqtl.gwas.overlap.position$position)) {
         6), c("white", "darkblue")))
     legend_Glomerulus = Legend(at = seq(0, max(annot.df), by = 1), col_fun = colorRamp2(c(0, 6), c("white", "orange")), title = "\nGlomerulus\n-log(pvalue)")
     legend_r2 = Legend(at = seq(0, 1, by = 0.2), title = "\nLinkage\nDisequilibrium\nR2", col_fun = colorRamp2(c(0, 1), c("white", "darkred")))
-    legend_dist = Legend(at = seq(0, 1, by = 0.2), title = "\nNormalized\nDistance", col_fun = colorRamp2(c(0, 1), c("white", "black")))
+    legend_dist = Legend(at = seq(0, max(zoom.ld.eqtl.gwas.overlap.dist), by = 10000), title = "\nDistance", col_fun = colorRamp2(c(0,  max(zoom.ld.eqtl.gwas.overlap.dist)), c("white", "black")))
     legend_gwas = Legend(at = c("GWAS"), title = "GWAS HIT", type = "points", legend_gp = gpar(col = "#2872f1"))
 
     # Make the heatmap!
