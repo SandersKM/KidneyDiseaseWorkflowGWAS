@@ -33,7 +33,7 @@ output.dir <- "/Users/ksanders/Documents/"
 # This will bring you to the nephvs eQTL webpage
 browseURL(paste("http://eqtl.nephvs.org/searchResult/", gene.of.interest, sep = ""))
 # Enter the path to the location of these downloaded files
-filepath <- "/Users/ksanders/Desktop/"
+filepath <- "/Users/ksanders/Downloads/"
 
 # Read in the NephQTL data Change filename (arg 2) if it is different from below
 nephQTL.glom <- read.csv(paste(filepath, "glom_MatrixEQTL_", gene.of.interest, ".csv", sep = ""), header = TRUE, sep = ",")
@@ -48,9 +48,6 @@ genomes.population <- "CEU"
 sort.by.pvalue <- TRUE # sorted by highest significance accross all tissue types
 sort.by.GWAS <- FALSE # variants with the most GWAS hits are first.
 sort.by.position <- FALSE # sorted by bp order
-
-#have every row be a unique variant and then have one col with all LD info
-
 
 ####################
 # BioMart Gene Info
@@ -161,7 +158,7 @@ get_risk_allele_string <- function(r, a) {
     allele.rows <- gwas.all.hits.rows[which(substring(r$STRONGEST.SNP.RISK.ALLELE, first = stri_length(r$STRONGEST.SNP.RISK.ALLELE[1])) ==
         a), ]
     return(paste("Disease Trait: ", allele.rows$DISEASE.TRAIT, "; P-Value: ", allele.rows$P.VALUE, "; -log_10(P-Value): ", allele.rows$PVALUE_MLOG,
-        "; Odds Ratio / BETA: ", allele.rows$OR.or.BETA, "; 95% CI: ", allele.rows$X95..CI..TEXT., collapse = " | "))
+        "; Odds Ratio / BETA: ", allele.rows$OR.or.BETA, "; 95% CI: ", allele.rows$X95..CI..TEXT., collapse = " || "))
 }
 for (i in 1:dim(gwas.variants)[1]) {
     gwas.all.hits.rows <- gwas.all.hits[which(gwas.all.hits$SNPS == gwas.variants$RSID[i]), ]
@@ -271,6 +268,16 @@ output.file$glom.pvalue <- eqtl.combined.glom$pvalue[eqtl.combined.glom.row]
 output.file$glom.MLog <- eqtl.combined.glom$Mlog[eqtl.combined.glom.row]
 output.file$glom.beta <- eqtl.combined.glom$beta[eqtl.combined.glom.row]
 
+# To get a row that has GWAS information for that variant
+
+output.file$GWAS <- character(length(output.file$rsid))
+gwas.match.rownum <- match(gwas.variants$RSID, output.file$rsid)
+for(i in 1:length(gwas.variants$RSID)){
+  if(!is.na(gwas.match.rownum[i])){
+    output.file$GWAS[gwas.match.rownum[i]] <- gwas.variants$all.studies[i]
+  }
+}
+
 # To get a row that has all LD informationrelated to that variant
 add_ld_information_to_output <- function(rsid){
   ld.string <- ""
@@ -289,12 +296,16 @@ add_ld_information_to_output <- function(rsid){
 }
 output.file$LD.info <- sapply(output.file$rsid, add_ld_information_to_output)
 
+# Sorting output file
+
 if(sort.by.position){
   output.file <- output.file[order(output.file$position),]
 }
 
 if(sort.by.GWAS){
-  output.file <- output.file[order()]
+  output.file$temp <- sapply(output.file$GWAS,function(x){length(strsplit(x, split = ";")[[1]])})
+  output.file <- output.file[order(output.file$temp, decreasing = TRUE),]
+  output.file <- output.file[, !colnames(output.file) == "temp"]
 }
 
 if(sort.by.pvalue){
@@ -345,11 +356,12 @@ dev.off()
 
 ld.eqtl.gwas.overlap.position <- LD.info.500Kb.unique.variants[match(eQTL.gwas.combined.rsid, LD.info.500Kb.unique.variants$rsid), ]
 
-range.around.gwas <- 25000
+range.around.gwas <- 10000
 dprime.min <- 0.85
 
 
 for (n in 1:length(ld.eqtl.gwas.overlap.position$position)) {
+  if(!is.na(ld.eqtl.gwas.overlap.position$position[n])){
     zoom.ld.eqtl.gwas.overlap <- ld.eqtl.overlap[which(ld.eqtl.overlap$position.variation1 < ld.eqtl.gwas.overlap.position$position[n] +
         range.around.gwas & ld.eqtl.overlap$position.variation1 > ld.eqtl.gwas.overlap.position$position[n] - range.around.gwas & ld.eqtl.overlap$position.variation2 <
         ld.eqtl.gwas.overlap.position$position[n] + range.around.gwas & ld.eqtl.overlap$position.variation2 > ld.eqtl.gwas.overlap.position$position[n] -
@@ -414,7 +426,7 @@ for (n in 1:length(ld.eqtl.gwas.overlap.position$position)) {
 
     # legend information
     legend_Tubulointerstitium = Legend(at = seq(0, max(annot.df), by = 1), title = "Tubulointerstitium\n-log(pvalue)", col_fun = colorRamp2(c(0,
-        6), c("white", "darkblue")))
+        6), c("white", "darkblue")), legend_height = unit(1, "cm"))
     legend_Glomerulus = Legend(at = seq(0, max(annot.df), by = 1), col_fun = colorRamp2(c(0, 6), c("white", "orange")), title = "\nGlomerulus\n-log(pvalue)")
     legend_r2 = Legend(at = seq(0, 1, by = 0.2), title = "\nLinkage\nDisequilibrium\nR2", col_fun = colorRamp2(c(0, 1), c("white", "darkred")))
     legend_dist = Legend(at = seq(0, max(zoom.ld.eqtl.gwas.overlap.dist), by = 10000), title = "\nDistance", col_fun = colorRamp2(c(0,  max(zoom.ld.eqtl.gwas.overlap.dist)), c("white", "black")))
@@ -424,7 +436,7 @@ for (n in 1:length(ld.eqtl.gwas.overlap.position$position)) {
     zoom.ld.eqtl.gwas.overlap.Heatmap <- Heatmap(zoom.ld.eqtl.gwas.overlap.combined.r2.dist, col = colorRamp2(c(-1, 1), c("white", "white"),
         transparency = 0.5), name = "LD R2", cluster_rows = FALSE, cluster_columns = FALSE, show_heatmap_legend = FALSE, show_row_names = TRUE,
         row_names_gp = gpar(col = col_label_names), show_column_names = TRUE, column_names_gp = gpar(col = col_label_names), show_column_dend = TRUE,
-        top_annotation = annot, top_annotation_height = unit(2, "cm"), cell_fun = function(j, i, x, y, width, height, fill) {
+        top_annotation = annot, top_annotation_height = unit(4, "cm"), cell_fun = function(j, i, x, y, width, height, fill) {
             grid.rect(x = x, y = y, width = width, height = height, gp = gpar(col = "white", fill = NA))
             if (i < j) {
                 grid.rect(x = x, y = y, width = width, height = height, gp = gpar(col = "lightgrey", fill = col_r2(zoom.ld.eqtl.gwas.overlap.combined.r2.dist[i,
@@ -439,5 +451,15 @@ for (n in 1:length(ld.eqtl.gwas.overlap.position$position)) {
     draw(zoom.ld.eqtl.gwas.overlap.Heatmap, annotation_legend_list = list(legend_Tubulointerstitium, legend_Glomerulus, legend_r2, legend_dist,
         legend_gwas))
     dev.off()
+  }
 }
 end_time <- Sys.time()
+
+####################
+# Write Output File
+####################
+
+write.csv(output.file, file = paste(output.dir, gene.of.interest, "_ComplexVariants.csv", sep = ""), row.names = FALSE)
+
+
+
